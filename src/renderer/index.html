@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ArqStudio 3D — Herramientas AEC</title>
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!--
+        Pantalla inicial (flujo de arranque):
+        1) #screen-dashboard → «Mis proyectos» (visible al iniciar)
+        2) #screen-workspace → editor 3D CAD (se monta la primera vez que se entra,
+           para no crear el contexto WebGL mientras está oculto)
+        3) #auth-overlay    → modal de Login / Registro (control de acceso)
+        El cambio entre pantallas lo gobierna src/renderer/src/main.ts.
+      -->
+      <div id="screen-dashboard" class="screen"></div>
+
+      <div id="screen-workspace" class="screen is-hidden">
+        <!-- Barra de título propia + barra de menú + iconos de acceso rápido -->
+        <div id="top-bars">
+          <div id="title-bar"></div>
+          <div id="menu-bar"></div>
+        </div>
+
+        <!-- Área de trabajo: Barra de actividades estilo VS Code + paneles laterales + lienzo 3D -->
+        <div id="workspace">
+          <div id="activity-bar"></div>
+
+          <div id="left-side-panel" class="side-panel-host side-panel-host--left">
+            <div id="toolbox-dock"></div>
+            <div id="navigator-panel"></div>
+            <div id="properties-panel"></div>
+            <div id="cost-panel"></div>
+          </div>
+
+          <div id="viewport-container">
+            <canvas id="viewport-canvas"></canvas>
+            <div id="viewport-label">Espacio de trabajo 3D interactivo</div>
+            <div id="viewport-overlay">
+              <div id="navigation-sphere"></div>
+            </div>
+            <div id="canvas-hud"></div>
+          </div>
+
+          <div id="right-side-panel" class="side-panel-host side-panel-host--right">
+            <div id="chat-panel"></div>
+          </div>
+
+          <div id="right-activity-bar"></div>
+        </div>
+
+        <!-- Dock inferior: línea de tiempo (animación) -->
+        <div id="timeline-dock" class="timeline-dock"></div>
+
+        <!-- Barra de estado inferior -->
+        <div id="status-bar"></div>
+
+        <!-- Paleta de comandos (Ctrl+K): búsqueda incremental de acciones -->
+        <div id="command-palette" class="command-palette is-hidden">
+          <div class="command-palette__backdrop" data-palette-cancel></div>
+          <div class="command-palette__card" role="dialog" aria-modal="true" aria-label="Paleta de comandos">
+            <div class="command-palette__header">
+              <span class="command-palette__search-icon" id="command-palette-icon"></span>
+              <input class="command-palette__input" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="command-palette__list" role="listbox" aria-label="Comandos"></div>
+            <p class="command-palette__empty is-hidden"></p>
+            <div class="command-palette__footer" id="command-palette-hint"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal de autenticación (Login / Registro) -->
+      <div id="auth-overlay" class="auth-overlay is-hidden"></div>
+
+      <!-- Diálogos propios (nombre de proyecto, confirmaciones) -->
+      <div id="dialog-overlay" class="dialog-overlay is-hidden"></div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+Piso;Categoría;Cantidad;Unidad;Precio unitario;Subtotal
+Piso 0;Muros;123.20000000000002;m2;42;5174.400000000001
+Piso 0;Losa / Piso;88;m2;28;2464
+Piso 0;Puertas;1;unidades;95;95
+Piso 0;Ventanas;1;unidades;48;48
+Piso 0;Muebles;1;unidades;32;32
+
+Subtotal;$7813.4
+Total;$7813

@@ -1,0 +1,94 @@
+{
+  "passed": 22,
+  "failed": 0,
+  "results": [
+    {
+      "ok": true,
+      "message": "sin sesión → la pantalla de login/registro está visible"
+    },
+    {
+      "ok": true,
+      "message": "sin sesión → el editor NO está visible"
+    },
+    {
+      "ok": true,
+      "message": "sin sesión → 0 tarjetas de proyecto (hubo 0)"
+    },
+    {
+      "ok": true,
+      "message": "sin sesión → sin contador de proyectos"
+    },
+    {
+      "ok": true,
+      "message": "sin sesión → ninguna referencia a proyectos en el DOM"
+    },
+    {
+      "ok": true,
+      "message": "sin sesión → Escape NO cierra la pantalla de login"
+    },
+    {
+      "ok": true,
+      "message": "registro A → sesión iniciada"
+    },
+    {
+      "ok": true,
+      "message": "cuenta nueva A → 0 proyectos (hubo 0)"
+    },
+    {
+      "ok": true,
+      "message": "estado vacío amable («Aún no tienes proyectos. ¡Crea el primero!»)"
+    },
+    {
+      "ok": true,
+      "message": "contador a 0 para la cuenta nueva"
+    },
+    {
+      "ok": true,
+      "message": "A ve su proyecto «Proyecto Fase1» ([\"Proyecto Fase1\"])"
+    },
+    {
+      "ok": true,
+      "message": "cerrar sesión → vuelve la pantalla de login"
+    },
+    {
+      "ok": true,
+      "message": "cerrar sesión → 0 tarjetas visibles"
+    },
+    {
+      "ok": true,
+      "message": "cerrar sesión → sin rastro del proyecto de A en el DOM"
+    },
+    {
+      "ok": true,
+      "message": "registro B → sesión iniciada"
+    },
+    {
+      "ok": true,
+      "message": "cuenta nueva B → 0 proyectos (hubo 0)"
+    },
+    {
+      "ok": true,
+      "message": "B no ve NADA del proyecto de A (ni nombre ni miniatura)"
+    },
+    {
+      "ok": true,
+      "message": "B ve el estado vacío («Aún no tienes proyectos. ¡Crea el primero!»)"
+    },
+    {
+      "ok": true,
+      "message": "B cierra sesión → login de nuevo"
+    },
+    {
+      "ok": true,
+      "message": "vuelve A → sesión iniciada"
+    },
+    {
+      "ok": true,
+      "message": "A recupera «Proyecto Fase1» ([\"Proyecto Fase1\"])"
+    },
+    {
+      "ok": true,
+      "message": "A ve exactamente 1 proyecto (1)"
+    }
+  ]
+}

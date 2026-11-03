@@ -1,0 +1,18 @@
+# Materiales exportados desde ArqStudio 3D
+# Units: metros (1 unidad = 1 m)
+
+newmtl mat.plaster
+Ka 0.187737 0.184316 0.174273
+Kd 0.938686 0.921582 0.871367
+Ks 0.140000 0.140000 0.140000
+Ns 750.000
+d 1.000000
+illum 2
+
+newmtl piso__Piso_0
+Ka 0.066490 0.060997 0.050032
+Kd 0.332452 0.304987 0.250158
+Ks 0.044000 0.044000 0.044000
+Ns 950.000
+d 1.000000
+illum 2

@@ -1,0 +1,32 @@
+{
+  "productName": "ArqStudio",
+  "appId": "com.arqstudio.arqstudio3d",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "out/**/*",
+    "node_modules/**/*"
+  ],
+  "protocols": [
+    {
+      "name": "ArqStudio",
+      "schemes": ["arqstudio"]
+    }
+  ],
+  "mac": {
+    "target": "dmg",
+    "CFBundleURLTypes": [
+      {
+        "CFBundleURLName": "com.arqstudio.arqstudio3d",
+        "CFBundleURLSchemes": ["arqstudio"]
+      }
+    ]
+  },
+  "win": {
+    "target": "nsis"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}

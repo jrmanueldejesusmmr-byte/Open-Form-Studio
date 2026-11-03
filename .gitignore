@@ -1,0 +1,24 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+
+# Diagnóstico local de arranque (main-error.log, diag-electron*.log).
+# Se generan en la máquina del usuario; nunca se versionan.
+logs/
+*.tsbuildinfo
+
+
+.env
+
+# Secretos: .env y cualquier variante local (.env.local, .env.bak, .env.akey…)
+# NUNCA deben subirse. EXCEPCIÓN: la plantilla .env.example sí se versiona.
+.env.*
+!.env.example
+
+# Claves/secretos sueltos que nunca deben subirse al repositorio.
+*.akey
+
+# Configuraciones temporales que genera electron-vite al empaquetar el config
+electron.vite.config.*.mjs

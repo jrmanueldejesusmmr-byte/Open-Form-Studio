@@ -1,0 +1,255 @@
+.cost-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e8eaed;
+  background: #15171b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cost-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.cost-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.cost-panel__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cost-panel__section {
+  border: 1px solid #262a31;
+  border-radius: 6px;
+  padding: 10px;
+  background: #1b1e24;
+}
+
+.cost-panel__section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.cost-panel__params {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.cost-panel__params label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #9aa4b2;
+}
+
+.cost-panel__params input {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #2f343c;
+  background: #0b0c0e;
+  color: #e8eaed;
+}
+
+.cost-panel__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cost-sum-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.cost-sum-row.notes {
+  color: #9aa4b2;
+  font-size: 12px;
+}
+
+.cost-panel__table-wrapper {
+  overflow-x: auto;
+}
+
+.cost-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cost-panel__table th, .cost-panel__table td {
+  padding: 8px 8px;
+  text-align: left;
+  border-bottom: 1px solid #262a31;
+}
+
+.cost-panel__table th {
+  background: #20242b;
+  color: #9aa4b2;
+  font-weight: 600;
+}
+
+.cost-panel__table tbody tr:hover { background: #20242b; }
+
+.cost-table__action { text-align: right; }
+
+.link {
+  background: none;
+  border: 0;
+  color: #58a6ff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.link:hover { text-decoration: underline; }
+
+.cost-panel__count {
+  color: #9aa4b2;
+  font-size: 12px;
+}
+
+.cost-panel__export {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.icon {
+  display: inline-block;
+  color: #58a6ff;
+}
+
+/* Pestañas de vista Resumen/Detalle */
+.cost-panel__tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cost-panel__tab {
+  border: 1px solid #262a31;
+  background: #1b1e24;
+  color: #9aa4b2;
+  padding: 6px 14px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cost-panel__tab:hover { color: #e8eaed; background: #20242b; }
+
+.cost-panel__tab--active {
+  color: #e8eaed;
+  background: #20242b;
+  border-bottom-color: #343a44;
+}
+
+/* Totales (sección superior del panel) */
+.cost-panel__section--summary {
+  border-color: #262a31;
+  background: linear-gradient(180deg, #1b1e24 0%, #171a1f 100%);
+}
+
+.cost-sum-row {
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.cost-panel__section--summary .cost-sum-row .cost-panel__count {
+  font-size: 12px;
+}
+
+/* Tabla de resumen: ancho completo y columas estables */
+.cost-panel__table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.cost-panel__table th,
+.cost-panel__table td {
+  padding: 8px 9px;
+  vertical-align: top;
+}
+
+.cost-panel__table thead th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cost-panel__table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.cost-panel__table tbody tr {
+  cursor: pointer;
+}
+
+.cost-panel__table tbody tr:hover {
+  background: rgba(88, 166, 255, 0.12);
+}
+
+.cost-panel__table--detail tbody tr:hover {
+  background: rgba(88, 166, 255, 0.18);
+}
+
+/* Detalle individual: cada fila con espacio para expandir */
+.cost-panel__table .detail-row {
+  border-top: 1px solid #262a31;
+}
+
+.cost-panel__table .detail-label {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.cost-panel__table .detail-toggle {
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+/* Se asegura de que la tabla se pueda leer horizontalmente al hacer scroll */
+.cost-panel__table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px;
+}
+
+.cost-panel__table-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.cost-panel__table-wrapper::-webkit-scrollbar-thumb {
+  background: #343a44;
+  border-radius: 4px;
+}
+
+/* Etiquetas de cotas sobre muros: ancho del panel respetado */
+.cost-dim-label {
+  font-size: 11px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
