@@ -38,6 +38,7 @@ export interface LayoutManagerOptions {
   onToggleOrtho?: () => void
   isAiAutoApplyEnabled?: () => boolean
   onToggleAiAutoApply?: () => void
+  onToggleCosts?: () => void
 }
 
 export class LayoutManager {
@@ -122,6 +123,12 @@ export class LayoutManager {
     this.activityBar = mountActivityBar(activityBarContainer, {
       activePanel: this.state.activeLeftPanel,
       onTogglePanel: (panelId) => {
+        if (panelId === 'costs') {
+          if (this.options.onToggleCosts) {
+            this.options.onToggleCosts()
+            return
+          }
+        }
         this.toggleLeft(panelId)
       },
       onAccountsClick: (btn) => {
@@ -193,6 +200,12 @@ export class LayoutManager {
   /* ---------- API Pública ---------- */
 
   toggle(id: PanelId): boolean {
+    if (id === 'costs') {
+      if (this.options.onToggleCosts) {
+        this.options.onToggleCosts()
+        return true
+      }
+    }
     if (id === 'chat') {
       return this.toggleRight()
     }

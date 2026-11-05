@@ -257,11 +257,11 @@ export function mountExportDialog(
               </label>
               <label class="exp-field flex flex-col gap-1">
                 <span class="exp-field__label text-xs text-slate-400 font-medium">Título del proyecto</span>
-                <input class="exp-field__control bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" data-pdf-project value="${escapeHtml(options.projectName ?? 'Proyecto ArqStudio')}" />
+                <input class="exp-field__control bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" data-pdf-project value="${escapeHtml(options.projectName ?? 'Proyecto Open Form Studio')}" />
               </label>
               <label class="exp-field flex flex-col gap-1">
                 <span class="exp-field__label text-xs text-slate-400 font-medium">Autor / Estudio</span>
-                <input class="exp-field__control bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" data-pdf-author value="ArqStudio 3D" />
+                <input class="exp-field__control bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" data-pdf-author value="Open Form Studio" />
               </label>
               <label class="exp-field flex flex-col gap-1">
                 <span class="exp-field__label text-xs text-slate-400 font-medium">Fecha de emisión</span>

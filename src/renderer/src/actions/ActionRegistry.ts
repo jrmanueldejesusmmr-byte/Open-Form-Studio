@@ -60,12 +60,13 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   { id: 'file.import', label: t('action.file.import'), icon: 'archive', category: 'archivo' },
   { id: 'file.print', label: t('action.file.print'), icon: 'printer', category: 'archivo', defaultShortcut: 'Ctrl+P' },
   { id: 'file.export', label: t('action.file.export'), icon: 'shapes', category: 'archivo' },
-  { id: 'file.clear', label: t('action.file.clear'), icon: 'trash', category: 'archivo', separatorBefore: true },
+  { id: 'file.clear', label: t('action.file.clear'), icon: 'trash', category: 'archivo', defaultShortcut: 'X', separatorBefore: true },
   { id: 'file.exit', label: t('action.file.exit'), icon: 'close', category: 'archivo', separatorBefore: true },
 
   /* Edición */
   { id: 'edit.undo', label: t('action.edit.undo'), icon: 'undo', category: 'edicion', defaultShortcut: 'Ctrl+Z' },
   { id: 'edit.redo', label: t('action.edit.redo'), icon: 'redo', category: 'edicion', defaultShortcut: 'Ctrl+Y' },
+  { id: 'edit.duplicate', label: t('action.edit.duplicate'), icon: 'copy', category: 'edicion', defaultShortcut: 'Ctrl+D' },
   { id: 'edit.copy', label: t('action.edit.copy'), icon: 'copy', category: 'edicion', defaultShortcut: 'Ctrl+C' },
   { id: 'edit.cut', label: t('action.edit.cut'), icon: 'scissors', category: 'edicion', defaultShortcut: 'Ctrl+X' },
   { id: 'edit.delete', label: t('action.edit.delete'), icon: 'trash', category: 'edicion', defaultShortcut: 'Supr' },
@@ -79,9 +80,17 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
 
   /* Dibujo */
   { id: 'tool.SimpleWall', label: t('action.tool.simpleWall'), icon: 'wall', category: 'dibujo', defaultShortcut: 'W' },
-  { id: 'tool.StructuralSegment', label: t('action.tool.structuralSegment'), icon: 'cube', category: 'dibujo', defaultShortcut: 'S' },
-  { id: 'tool.RoomWalls', label: t('action.tool.roomWalls'), icon: 'layers', category: 'dibujo', defaultShortcut: 'R' },
-  { id: 'tool.roof', label: t('action.tool.roof'), icon: 'roof', category: 'dibujo' },
+  { id: 'tool.StructuralSegment', label: t('action.tool.structuralSegment'), icon: 'cube', category: 'dibujo', defaultShortcut: 'E' },
+  { id: 'tool.RoomWalls', label: t('action.tool.roomWalls'), icon: 'layers', category: 'dibujo' },
+  { id: 'template.rect', label: t('action.template.rect'), icon: 'plan2d', category: 'dibujo', defaultShortcut: 'R', separatorBefore: true },
+  { id: 'template.l', label: t('action.template.l'), icon: 'shapes', category: 'dibujo', defaultShortcut: 'L' },
+  { id: 'template.u', label: t('action.template.u'), icon: 'shapes', category: 'dibujo', defaultShortcut: 'U' },
+  { id: 'template.c', label: t('action.template.c'), icon: 'shapes', category: 'dibujo', defaultShortcut: 'P' },
+  { id: 'template.t', label: t('action.template.t'), icon: 'shapes', category: 'dibujo', defaultShortcut: 'T' },
+  { id: 'template.cross', label: t('action.template.cross'), icon: 'plus', category: 'dibujo', defaultShortcut: 'Y' },
+  { id: 'template.ring', label: t('action.template.ring'), icon: 'orbit', category: 'dibujo', defaultShortcut: 'N' },
+  { id: 'template.arc', label: t('action.template.arc'), icon: 'shapes', category: 'dibujo', defaultShortcut: 'B' },
+  { id: 'tool.roof', label: t('action.tool.roof'), icon: 'roof', category: 'dibujo', separatorBefore: true },
   { id: 'tool.slab', label: t('action.tool.slab'), icon: 'table', category: 'dibujo' },
   { id: 'tool.door', label: t('action.tool.door'), icon: 'door', category: 'dibujo', separatorBefore: true },
   { id: 'tool.window', label: t('action.tool.window'), icon: 'window', category: 'dibujo' },
@@ -92,10 +101,11 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   { id: 'level.next', label: t('action.level.next'), icon: 'stairs', category: 'dibujo' },
 
   /* Modificadores (viven en el toolbox) */
-  { id: 'modify.move', label: t('action.modify.move'), icon: 'move', category: 'modificadores', defaultShortcut: 'M' },
-  { id: 'modify.copy', label: t('action.modify.copy'), icon: 'copy', category: 'modificadores', defaultShortcut: 'C' },
-  { id: 'modify.trim', label: t('action.modify.trim'), icon: 'scissors', category: 'modificadores', defaultShortcut: 'T' },
-  { id: 'modify.erase', label: t('action.modify.erase'), icon: 'trash', category: 'modificadores', defaultShortcut: 'Supr' },
+  { id: 'modify.move', label: t('action.modify.move'), icon: 'move', category: 'modificadores', defaultShortcut: 'V' },
+  { id: 'modify.rotate90', label: t('action.modify.rotate90'), icon: 'rotateCw', category: 'modificadores', defaultShortcut: 'G' },
+  { id: 'modify.copy', label: t('action.modify.copy'), icon: 'copy', category: 'modificadores' },
+  { id: 'modify.trim', label: t('action.modify.trim'), icon: 'scissors', category: 'modificadores' },
+  { id: 'modify.erase', label: t('action.modify.erase'), icon: 'trash', category: 'modificadores' },
 
   /* Herramientas de dibujo */
   { id: 'tool.pencil', label: t('action.tool.pencil'), icon: 'pencil', category: 'herramientas' },
@@ -104,7 +114,7 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   { id: 'tool.eraser', label: t('action.tool.eraser'), icon: 'eraser', category: 'herramientas' },
   { id: 'tool.ruler', label: t('action.tool.ruler'), icon: 'ruler', category: 'herramientas' },
   { id: 'tool.hand', label: t('action.tool.hand'), icon: 'hand', category: 'herramientas' },
-  { id: 'tool.crosshair', label: t('action.tool.crosshair'), icon: 'crosshair', category: 'herramientas', defaultShortcut: 'Esc' },
+  { id: 'tool.crosshair', label: t('action.tool.crosshair'), icon: 'crosshair', category: 'herramientas', defaultShortcut: 'S' },
 
   /* Anotación */
   { id: 'annot.text', label: t('action.annot.text'), icon: 'type', category: 'anotacion' },
@@ -127,9 +137,12 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   { id: 'notas.table', label: t('action.notas.table'), icon: 'archive', category: 'notas' },
 
   /* Vistas */
+  { id: 'view.toggle2d3d', label: t('action.view.toggle2d3d'), icon: 'plan2d', category: 'vista', defaultShortcut: 'Space' },
+  { id: 'view.quadView', label: 'Vista Cuádruple BIM (Planta / Corte / Fachada / 3D)', icon: 'monitor', category: 'vista', defaultShortcut: '4' },
+  { id: 'view.toggleBimTable', label: 'Tabla Maestra BIM, Cuantificación y Costos (Live Data)', icon: 'calculator', category: 'vista', defaultShortcut: 'Ctrl+Shift+B' },
   { id: 'aux.2d', label: t('action.aux.2d'), icon: 'plan2d', category: 'vista', defaultShortcut: '2' },
   { id: 'aux.3d', label: t('action.aux.3d'), icon: 'cube', category: 'vista', defaultShortcut: '3' },
-  { id: 'aux.fit', label: t('action.aux.fit'), icon: 'crosshair', category: 'vista', defaultShortcut: 'Ctrl+Shift+E' },
+  { id: 'aux.fit', label: t('action.aux.fit'), icon: 'crosshair', category: 'vista', defaultShortcut: 'C' },
   { id: 'view.orbit', label: t('action.view.orbit'), icon: 'orbit', category: 'vista', defaultShortcut: 'O' },
   { id: 'aux.reset', label: t('action.aux.reset'), icon: 'refresh', category: 'vista' },
   { id: 'aux.top', label: t('action.aux.top'), icon: 'plan2d', category: 'vista' },
@@ -144,6 +157,7 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   { id: 'aids.ortho', label: t('action.aids.ortho'), icon: 'ruler', category: 'ayudas' },
   { id: 'aids.polar', label: t('action.aids.polar'), icon: 'crosshair', category: 'ayudas' },
   { id: 'aids.layers', label: t('action.aids.layers'), icon: 'layers', category: 'ayudas', defaultShortcut: 'Ctrl+2' },
+  { id: 'help.shortcuts', label: t('action.help.shortcuts'), icon: 'keyboard', category: 'ayudas', defaultShortcut: '?', separatorBefore: true },
 
   /* Paleta de comandos (Fase 4) */
   {

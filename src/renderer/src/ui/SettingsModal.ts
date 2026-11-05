@@ -1,5 +1,13 @@
 import { icon } from './icons'
 import { showToast } from './Toast'
+import {
+  ACCENT_COLORS,
+  BACKGROUND_THEMES,
+  themeManager,
+  type AccentColorId,
+  type BackgroundThemeId,
+  type WorkBgStyleId
+} from '../services/ThemeManager'
 
 export type SettingsTabId = 'general' | 'drawing' | 'ai' | 'shortcuts' | 'advanced'
 
@@ -84,6 +92,20 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
   }
 
   function renderGeneralTab(): string {
+    const cfg = themeManager.getConfig()
+    const themeOptionsHtml = (Object.keys(BACKGROUND_THEMES) as BackgroundThemeId[])
+      .map((id) => {
+        const def = BACKGROUND_THEMES[id]
+        return `<option value="${id}" ${cfg.themeId === id ? 'selected' : ''}>${def.name} (${def.subtitle})</option>`
+      })
+      .join('')
+    const accentOptionsHtml = (Object.keys(ACCENT_COLORS) as AccentColorId[])
+      .map((id) => {
+        const def = ACCENT_COLORS[id]
+        return `<option value="${id}" ${cfg.accentId === id ? 'selected' : ''}>${def.name}</option>`
+      })
+      .join('')
+
     return `
       <div class="space-y-4">
         <div class="border-b border-slate-800 pb-3">
@@ -91,20 +113,36 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
             <span class="text-blue-400">${icon('palette', 16)}</span>
             <span>General y Entorno</span>
           </h3>
-          <p class="text-xs text-slate-400 mt-0.5">Personaliza la apariencia gráfica, tema visual y localización del sistema.</p>
+          <p class="text-xs text-slate-400 mt-0.5">Personaliza la apariencia gráfica, tema visual, estilo del lienzo 3D y localización.</p>
         </div>
 
-        <!-- Tarjeta 1: Tema visual -->
+        <!-- Tarjeta 1: Tema visual sincronizado globalmente -->
         <div class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 flex items-center justify-between gap-4">
           <div class="min-w-0">
-            <span class="text-xs font-semibold text-slate-200 block">Tema visual del lienzo</span>
-            <span class="text-[11px] text-slate-400 block mt-0.5">Esquema cromático optimizado para diseño técnico arquitectónico.</span>
+            <span class="text-xs font-semibold text-slate-200 block">Tema visual (Dashboard + Editor 3D)</span>
+            <span class="text-[11px] text-slate-400 block mt-0.5">Sincroniza paneles flotantes, menús, chat de IA y escena WebGL 3D.</span>
           </div>
           <div class="shrink-0">
-            <select class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer">
-              <option value="dark-cad" selected>Oscuro CAD (Predeterminado)</option>
-              <option value="graphite">Grafito AEC Studio</option>
-              <option value="high-contrast">Alto Contraste Tridimensional</option>
+            <select id="pref-theme-select" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer">
+              ${themeOptionsHtml}
+            </select>
+          </div>
+        </div>
+
+        <!-- Tarjeta 1B: Color de acento y estilo de fondo 3D -->
+        <div class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 grid grid-cols-2 gap-4">
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-semibold text-slate-200 block">Color de Acento</span>
+            <select id="pref-accent-select" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer">
+              ${accentOptionsHtml}
+            </select>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-semibold text-slate-200 block">Estilo de Fondo de Trabajo 3D</span>
+            <select id="pref-workbg-select" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer">
+              <option value="grid" ${cfg.workBgStyle === 'grid' ? 'selected' : ''}>Retícula métrica (Grid)</option>
+              <option value="dots" ${cfg.workBgStyle === 'dots' ? 'selected' : ''}>Matriz de puntos (Dots)</option>
+              <option value="solid" ${cfg.workBgStyle === 'solid' ? 'selected' : ''}>Fondo sólido limpio</option>
             </select>
           </div>
         </div>
@@ -343,11 +381,11 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
           </button>
         </div>
 
-        <!-- Acerca de ArqStudio 3D -->
+        <!-- Acerca de Open Form Studio -->
         <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-400 space-y-1.5">
           <div class="flex items-center gap-2 font-semibold text-slate-200">
             <span class="text-blue-400">${icon('cube', 16)}</span>
-            <span>ArqStudio 3D</span>
+            <span>Open Form Studio</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">v0.1.0</span>
           </div>
           <p class="m-0 text-[11px] text-slate-400 leading-relaxed">
@@ -399,6 +437,22 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
 
   function wireTabEvents(): void {
     if (!modalEl) return
+
+    // Selectores de Tema, Acento y Estilo de Fondo 3D
+    const themeSel = modalEl.querySelector<HTMLSelectElement>('#pref-theme-select')
+    themeSel?.addEventListener('change', () => {
+      themeManager.setTheme(themeSel.value as BackgroundThemeId)
+    })
+
+    const accentSel = modalEl.querySelector<HTMLSelectElement>('#pref-accent-select')
+    accentSel?.addEventListener('change', () => {
+      themeManager.setAccent(accentSel.value as AccentColorId)
+    })
+
+    const workBgSel = modalEl.querySelector<HTMLSelectElement>('#pref-workbg-select')
+    workBgSel?.addEventListener('change', () => {
+      themeManager.setWorkBgStyle(workBgSel.value as WorkBgStyleId)
+    })
 
     // Switch de Rejilla
     const gridBtn = modalEl.querySelector<HTMLButtonElement>('#pref-grid-toggle')
@@ -480,7 +534,7 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
     modalEl.className = 'settings-modal fixed inset-0 z-[1000] flex items-center justify-center p-4'
     modalEl.innerHTML = `
       <div class="settings-modal__backdrop absolute inset-0 bg-slate-950/80 backdrop-blur-sm" data-settings-close></div>
-      <div class="settings-modal__dialog relative max-w-4xl w-full h-[620px] max-h-[90vh] bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl" role="dialog" aria-modal="true" aria-label="Preferencias de ArqStudio 3D">
+      <div class="settings-modal__dialog relative max-w-4xl w-full h-[620px] max-h-[90vh] bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl" role="dialog" aria-modal="true" aria-label="Preferencias de Open Form Studio">
         
         <!-- Header del Modal -->
         <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
@@ -489,7 +543,7 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
               ${icon('settings', 18)}
             </div>
             <div>
-              <h2 class="text-sm font-semibold text-slate-100 m-0">Preferencias de ArqStudio 3D</h2>
+              <h2 class="text-sm font-semibold text-slate-100 m-0">Preferencias de Open Form Studio</h2>
               <p class="text-[11px] text-slate-400 m-0">Configura el entorno de modelado, motor gráfico, asistencias y accesos rápidos</p>
             </div>
           </div>
@@ -555,7 +609,7 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
             </div>
 
             <div class="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/60 text-[11px] text-slate-500">
-              <div class="font-semibold text-slate-400">ArqStudio 3D</div>
+              <div class="font-semibold text-slate-400">Open Form Studio</div>
               <div>v0.1.0 · Motor WebGL 3D</div>
             </div>
           </nav>
@@ -623,13 +677,14 @@ export function mountSettingsModal(options: SettingsModalOptions): SettingsModal
     modalEl.querySelector('[data-settings-save]')?.addEventListener('click', () => {
       showToast({
         title: 'Preferencias guardadas',
-        subtitle: 'La configuración de ArqStudio 3D se aplicó correctamente.',
+        subtitle: 'La configuración de Open Form Studio se aplicó correctamente.',
         type: 'success'
       })
       close()
     })
 
     modalEl.querySelector('#pref-reset-defaults')?.addEventListener('click', () => {
+      themeManager.resetToDefaults()
       // Restablecer valores de dibujo si están desactivados
       if (!(options.isGridVisible?.() ?? true)) options.onToggleGrid?.()
       if (!(options.isSnapEnabled?.() ?? true)) options.onToggleSnap?.()

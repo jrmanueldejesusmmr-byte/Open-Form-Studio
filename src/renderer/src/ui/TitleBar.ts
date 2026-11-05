@@ -1,4 +1,5 @@
 import { icon } from './icons'
+import logoUrl from '../assets/logo.png'
 
 /** Puente expuesto por `src/preload/index.ts` o `window.electron.ipcRenderer` para controlar la ventana sin marco. */
 export interface WindowBridge {
@@ -58,11 +59,19 @@ export interface TitleBarOptions {
 export function mountTitleBar(container: HTMLElement, options: TitleBarOptions): void {
   const bridge = windowBridge()
 
+  const isBrandTitle = !options.title || options.title.includes('Open Form') || options.title.includes('ArqStudio')
+  const titleContent = isBrandTitle
+    ? `<span class="brand-title"><strong class="brand-title__bold">OPEN FORM</strong> <span class="brand-title__light">STUDIO</span></span>`
+    : `<span class="titlebar__title">${options.title}</span>`
+
   container.innerHTML = `
     <div class="titlebar">
       <div class="titlebar__brand">
-        <span class="titlebar__logo">${icon('cube', 14)}</span>
-        <span class="titlebar__title">${options.title}</span>
+        <span class="titlebar__logo" title="Open Form Studio">
+          <img class="brand-logo-img" src="${logoUrl}" alt="Open Form Studio Logo" />
+        </span>
+        ${titleContent}
+        <span class="dash__brand-badge">3D</span>
         ${options.subtitle ? `<span class="titlebar__subtitle">${options.subtitle}</span>` : ''}
       </div>
       <div class="titlebar__spacer"></div>

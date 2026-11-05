@@ -10,6 +10,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+if (typeof globalThis.self === 'undefined') {
+  globalThis.self = globalThis
+}
+
 const OUT_DIR = path.join(process.cwd(), 'scripts', 'captures', 'export')
 
 // El bundle se genera DENTRO del proyecto: si viviera en /tmp, Node no
@@ -24,7 +28,7 @@ await build({
   format: 'esm',
   platform: 'node',
   outfile: out,
-  external: ['three', 'three/examples/jsm/*'],
+  external: ['three', 'three/examples/jsm/*', '@napi-rs/canvas'],
   logLevel: 'error'
 })
 

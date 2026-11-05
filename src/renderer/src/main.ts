@@ -1,3 +1,4 @@
+import './services/ThemeManager'
 import { AuthService } from './services/AuthService'
 import { ProjectStore } from './services/ProjectStore'
 import { isSupabaseConfigured } from './services/supabaseClient'

@@ -18,6 +18,54 @@ if (typeof (globalThis as { FileReader?: unknown }).FileReader === 'undefined') 
   }
 }
 
+if (typeof (globalThis as { HTMLCanvasElement?: unknown }).HTMLCanvasElement === 'undefined') {
+  ;(globalThis as Record<string, unknown>).HTMLCanvasElement = class HTMLCanvasElement {}
+}
+if (typeof (globalThis as { HTMLImageElement?: unknown }).HTMLImageElement === 'undefined') {
+  ;(globalThis as Record<string, unknown>).HTMLImageElement = class HTMLImageElement {}
+}
+
+if (typeof (globalThis as { document?: unknown }).document === 'undefined') {
+  const dummyObj = { addColorStop: () => {} }
+  const mockCtx = new Proxy(
+    {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      width: 256,
+      height: 256,
+      getImageData: () => ({ data: new Uint8ClampedArray(256 * 256 * 4) }),
+      createImageData: () => ({ data: new Uint8ClampedArray(256 * 256 * 4) }),
+      createLinearGradient: () => dummyObj,
+      createRadialGradient: () => dummyObj,
+      createPattern: () => dummyObj
+    },
+    {
+      get(target, prop) {
+        if (prop in target) return (target as Record<string, unknown>)[prop as string]
+        return () => {}
+      }
+    }
+  )
+  ;(globalThis as Record<string, unknown>).document = {
+    createElement: (tag: string) => {
+      if (tag === 'canvas') {
+        const c = Object.create((globalThis as { HTMLCanvasElement: { prototype: object } }).HTMLCanvasElement.prototype)
+        return Object.assign(c, {
+          width: 256,
+          height: 256,
+          getContext: () => mockCtx,
+          toDataURL: () =>
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          toBlob: (cb: (b: Blob) => void) => cb(new Blob([new Uint8Array(10)])),
+          convertToBlob: async () => new Blob([new Uint8Array(10)])
+        })
+      }
+      return {}
+    }
+  }
+}
+
 export async function exportGlb(
   scene: THREE.Scene,
   context?: ExportContext,
@@ -39,8 +87,9 @@ export async function exportGlb(
             reject(new Error('GLTFExporter: formato inesperado'))
           }
         },
-        (event: ErrorEvent) => {
-          reject(event.error ?? new Error('GLTFExporter: error desconocido'))
+        (event: unknown) => {
+          const err = (event as { error?: Error })?.error ?? (event instanceof Error ? event : new Error(String(event)))
+          reject(err)
         },
         { binary: true }
       )

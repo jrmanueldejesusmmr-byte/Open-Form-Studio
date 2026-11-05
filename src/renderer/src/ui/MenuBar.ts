@@ -47,7 +47,14 @@ const MENU_LAYOUT: MenuDefinition[] = [
     items: [
       'tool.SimpleWall',
       'tool.StructuralSegment',
-      'tool.RoomWalls',
+      'template.rect',
+      'template.l',
+      'template.u',
+      'template.c',
+      'template.t',
+      'template.cross',
+      'template.ring',
+      'template.arc',
       'tool.roof',
       'tool.slab',
       'tool.door',
@@ -69,6 +76,8 @@ const MENU_LAYOUT: MenuDefinition[] = [
   {
     label: t('menu.view'),
     items: [
+      'view.quadView',
+      'view.toggleBimTable',
       'view.toggleToolbox',
       'view.toggleLayers',
       'view.toggleNavigator',
@@ -81,11 +90,11 @@ const MENU_LAYOUT: MenuDefinition[] = [
   },
   {
     label: t('menu.aux'),
-    items: ['aux.2d', 'aux.3d', 'aux.fit', 'aux.reset', 'aux.top', 'aux.front', 'aux.right', 'aux.zoomIn', 'aux.zoomOut']
+    items: ['view.toggle2d3d', 'aux.2d', 'aux.3d', 'aux.fit', 'aux.reset', 'aux.top', 'aux.front', 'aux.right', 'aux.zoomIn', 'aux.zoomOut']
   },
   {
     label: t('menu.aids'),
-    items: ['aids.grid', 'aids.snap', 'aids.ortho', 'aids.polar', 'aids.layers']
+    items: ['aids.grid', 'aids.snap', 'aids.ortho', 'aids.polar', 'aids.layers', 'help.shortcuts']
   }
 ]
 
@@ -189,6 +198,11 @@ export function mountMenuBar(container: HTMLElement, options: MenuBarOptions): M
         ${QUICK_ACTIONS.map(renderQuickAction).join('')}
       </div>
       <div class="quickbar__spacer"></div>
+      <button type="button" class="shortcuts-trigger-btn" data-menu-action="help.shortcuts" title="Ver lista de atajos de teclado 2D y 3D [? / H]">
+        ${icon('keyboard', 14)}
+        <span>Atajos</span>
+        <kbd class="kbd-badge">[?]</kbd>
+      </button>
       <div class="quickbar__playback">
         <span class="quickbar__sep"></span>
         <button class="playback-btn playback-btn--play" data-playback="play" title="Reproducir (Espacio)">${icon('play', 15)}</button>
@@ -239,6 +253,7 @@ export function mountMenuBar(container: HTMLElement, options: MenuBarOptions): M
   container.querySelectorAll<HTMLElement>('[data-menu-action]').forEach((el) => {
     el.addEventListener('click', (event) => {
       event.stopPropagation()
+      el.blur()
       const action = el.dataset.menuAction
       if (!action) return
       closeAll()

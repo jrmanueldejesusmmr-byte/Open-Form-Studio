@@ -1,6 +1,12 @@
 import * as THREE from 'three'
 import { DEFAULT_LEVEL_ID } from './Level'
+import type { DoorStyle, WindowStyle, SwingHand, SwingDirection } from './Opening'
 import type { RoofProps } from './Roof'
+import type { StructuralParams } from './StructuralTypes'
+import { cloneTerrainData, type TerrainData } from './TerrainTypes'
+
+export type { StructuralParams, StructuralMaterialType } from './StructuralTypes'
+export type { TerrainData, TerrainGradingPad, TerrainSpotElevation } from './TerrainTypes'
 
 let nextObjectId = 1
 
@@ -86,6 +92,14 @@ export class SceneObject {
    * Ángulo de apertura de la hoja en grados (0 = cerrada, 90 = abierta).
    */
   openingAngle: number = 0
+  /** Estilo de diseño arquitectónico 3D para puertas ('lisa', '6paneles', 'conVisor'...). */
+  doorStyle: DoorStyle | null = null
+  /** Estilo de diseño arquitectónico 3D para ventanas ('corrediza2', 'pisoTecho', 'colonial'...). */
+  windowStyle: WindowStyle | null = null
+  /** Mano de la bisagra (izquierda / derecha). */
+  swingHand: SwingHand = 'left'
+  /** Sentido de apertura (interior / exterior). */
+  swingDirection: SwingDirection = 'in'
   /** Material del catálogo para la hoja de la puerta (mat.wood, mat.glass...). */
   leafMaterialId: string | null = null
   /** Material del catálogo para el marco de la puerta. */
@@ -94,6 +108,10 @@ export class SceneObject {
   handleVisible: boolean = false
   /** Visibilidad individual del objeto (animable desde la línea de tiempo). */
   visible: boolean = true
+  /** Parámetros dinámicos de sistemas estructurales y formas 3D (`struct.*` / `geo.*`). */
+  structuralParams: StructuralParams | null = null
+  /** Datos topográficos 3D cuando el objeto representa un terreno (`topo.terrain`). */
+  terrainData: TerrainData | null = null
   isSelected = false
 
   constructor(
@@ -133,8 +151,26 @@ export interface SceneObjectSnapshot {
   openingId?: string | null
   /** Ángulo de apertura de la hoja en grados (opcional). */
   openingAngle?: number
+  /** Estilo de puerta arquitectónica (opcional). */
+  doorStyle?: DoorStyle | null
+  /** Estilo de ventana arquitectónica (opcional). */
+  windowStyle?: WindowStyle | null
+  /** Mano de bisagra (opcional). */
+  swingHand?: SwingHand
+  /** Sentido de apertura (opcional). */
+  swingDirection?: SwingDirection
+  /** Material de hoja (opcional). */
+  leafMaterialId?: string | null
+  /** Material de marco (opcional). */
+  frameMaterialId?: string | null
+  /** Visibilidad de manilla (opcional). */
+  handleVisible?: boolean
   /** Visibilidad individual (opcional; true por defecto). */
   visible?: boolean
+  /** Parámetros estructurales paramétricos (opcional). */
+  structuralParams?: StructuralParams | null
+  /** Malla y metadatos de terreno topográfico (opcional). */
+  terrainData?: TerrainData | null
 }
 
 export function objectToSnapshot(object: SceneObject): SceneObjectSnapshot {
@@ -155,7 +191,16 @@ export function objectToSnapshot(object: SceneObject): SceneObjectSnapshot {
     openingVariant: object.openingVariant,
     openingId: object.openingId,
     openingAngle: object.openingAngle,
-    visible: object.visible
+    doorStyle: object.doorStyle,
+    windowStyle: object.windowStyle,
+    swingHand: object.swingHand,
+    swingDirection: object.swingDirection,
+    leafMaterialId: object.leafMaterialId,
+    frameMaterialId: object.frameMaterialId,
+    handleVisible: object.handleVisible,
+    visible: object.visible,
+    structuralParams: object.structuralParams ? { ...object.structuralParams } : null,
+    terrainData: cloneTerrainData(object.terrainData)
   }
 }
 
@@ -176,6 +221,15 @@ export function objectFromSnapshot(snapshot: SceneObjectSnapshot): SceneObject {
   object.openingVariant = snapshot.openingVariant ?? null
   object.openingId = snapshot.openingId ?? null
   object.openingAngle = snapshot.openingAngle ?? 0
+  object.doorStyle = snapshot.doorStyle ?? null
+  object.windowStyle = snapshot.windowStyle ?? null
+  object.swingHand = snapshot.swingHand ?? 'left'
+  object.swingDirection = snapshot.swingDirection ?? 'in'
+  object.leafMaterialId = snapshot.leafMaterialId ?? null
+  object.frameMaterialId = snapshot.frameMaterialId ?? null
+  object.handleVisible = snapshot.handleVisible ?? false
   object.visible = snapshot.visible ?? true
+  object.structuralParams = snapshot.structuralParams ? { ...snapshot.structuralParams } : null
+  object.terrainData = cloneTerrainData(snapshot.terrainData)
   return object
 }

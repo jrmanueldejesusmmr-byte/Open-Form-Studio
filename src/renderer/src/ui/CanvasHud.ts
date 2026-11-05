@@ -2,21 +2,23 @@ import type { ViewMode } from '../engine/ViewportRenderer'
 import { icon } from './icons'
 import { t } from '../i18n/es'
 
+export type ExtendedViewMode = ViewMode | 'quad'
+
 /**
  * Superposiciones del lienzo: lectura de coordenadas estilo CAD
  * ("Status: x, z"), el control de zoom continuo y los botones de cambio de
- * vista 2D / 3D / Convertir a plano.
+ * vista 2D / 3D / Convertir a plano / Vista Cuádruple BIM.
  */
 export interface CanvasHudOptions {
   onZoomFraction: (fraction01: number) => void
-  onViewMode: (mode: ViewMode) => void
+  onViewMode: (mode: ExtendedViewMode) => void
   onConvertToPlan: () => void
 }
 
 export interface CanvasHudHandle {
   /** Refleja el zoom del motor en el slider (p. ej. al usar la rueda del ratón). */
   setZoomFraction: (fraction01: number) => void
-  setViewMode: (mode: ViewMode) => void
+  setViewMode: (mode: ExtendedViewMode) => void
   /** Coordenadas del cursor sobre el plano de trabajo. */
   setStatusCoordinates: (x: number, z: number) => void
   setStatusText: (text: string) => void
@@ -33,8 +35,10 @@ export function mountCanvasHud(container: HTMLElement, options: CanvasHudOptions
         <span class="hud__zoom-sign">+</span>
       </div>
       <div class="hud__views">
-        <button class="view-btn" data-view-mode="2d" title="Planta ortográfica">${icon('plan2d', 14)}<span>${t('hud.view2d')}</span></button>
-        <button class="view-btn is-active" data-view-mode="3d" title="Vista 3D orbital">${icon('cube', 14)}<span>${t('hud.view3d')}</span></button>
+        <button class="view-btn" data-view-mode="2d" title="Planta ortográfica [2 · Barra espaciadora alterna]">${icon('plan2d', 14)}<span>${t('hud.view2d')}</span></button>
+        <button class="view-btn is-active" data-view-mode="3d" title="Vista 3D orbital [3 · Barra espaciadora alterna]">${icon('cube', 14)}<span>${t('hud.view3d')}</span></button>
+        <button class="view-btn quad-view-hud-btn" data-view-mode="quad" title="🪟 Vista Cuádruple BIM (Planta / Corte / Fachada / 3D)">🪟 <span>Vista Cuádruple BIM</span></button>
+        <span class="hud__space-badge" title="Pulsa la barra espaciadora para alternar entre 2D y 3D"><kbd class="kbd-badge">[Espacio]</kbd></span>
         <button class="view-btn view-btn--accent" data-convert-plan title="Generar la planta del modelo">${t('hud.convert')}</button>
       </div>
     </div>
@@ -48,13 +52,15 @@ export function mountCanvasHud(container: HTMLElement, options: CanvasHudOptions
 
   viewButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
-      const mode = btn.dataset.viewMode as ViewMode
+      btn.blur()
+      const mode = btn.dataset.viewMode as ExtendedViewMode
       viewButtons.forEach((other) => other.classList.toggle('is-active', other === btn))
       options.onViewMode(mode)
     })
   })
 
-  container.querySelector<HTMLButtonElement>('[data-convert-plan]')?.addEventListener('click', () => {
+  container.querySelector<HTMLButtonElement>('[data-convert-plan]')?.addEventListener('click', (e) => {
+    ;(e.currentTarget as HTMLButtonElement | null)?.blur()
     options.onConvertToPlan()
   })
 
@@ -62,7 +68,7 @@ export function mountCanvasHud(container: HTMLElement, options: CanvasHudOptions
     setZoomFraction(fraction01: number): void {
       slider.value = fraction01.toString()
     },
-    setViewMode(mode: ViewMode): void {
+    setViewMode(mode: ExtendedViewMode): void {
       viewButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.viewMode === mode))
     },
     setStatusCoordinates(x: number, z: number): void {

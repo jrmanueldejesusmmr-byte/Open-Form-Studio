@@ -4,6 +4,7 @@ import type { IconName } from '../ui/icons'
 import type { SceneObjectKind } from '../models/SceneObject'
 import { MATERIAL_CATALOG } from './materials'
 import { base64ToBytes, loadModel, type Model3DFormat } from '../import/modelImport'
+import { CAD_BLOCKS, getCadBlock } from './cadBlocksData'
 
 /**
  * Catálogo compartido de elementos colocables y modelos personalizados 3D.
@@ -236,6 +237,228 @@ const PLACEABLE_ENTRIES: readonly CatalogEntry[] = [
     materialId: 'mat.concrete',
     hint: 'Anillo - Ø 1.40m',
     dimensions: { width: 1.4, height: 1.4, depth: 0.25 },
+    modalCategory: 'structural'
+  },
+
+  /* 13 Sistemas Estructurales Arquitectónicos + Figuras Geométricas y Redondas Base */
+  {
+    id: 'struct.adintelada',
+    label: '1. Adintelada / Arquitrabada',
+    kind: 'shape',
+    icon: 'building',
+    shapeId: 'struct.adintelada',
+    materialId: 'mat.concrete',
+    hint: 'Pórticos de postes/columnas y vigas horizontales',
+    dimensions: { width: 8.0, height: 3.6, depth: 5.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.abovedada',
+    label: '2. Abovedada (Arco / Bóveda / Cúpula)',
+    kind: 'shape',
+    icon: 'building',
+    shapeId: 'struct.abovedada',
+    materialId: 'mat.stone',
+    hint: 'Arcos de medio punto, bóvedas de cañón y cúpulas',
+    dimensions: { width: 7.0, height: 4.5, depth: 7.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.entramada',
+    label: '3. Entramada / Armazón 3D',
+    kind: 'shape',
+    icon: 'building',
+    shapeId: 'struct.entramada',
+    materialId: 'mat.concrete',
+    hint: 'Retícula 3D de pilares, vigas y losas/forjados',
+    dimensions: { width: 10.0, height: 6.4, depth: 8.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.triangulada',
+    label: '4. Triangulada (Cerchas / Celosías)',
+    kind: 'shape',
+    icon: 'shapes',
+    shapeId: 'struct.triangulada',
+    materialId: 'mat.steel',
+    hint: 'Cerchas metálicas o de madera y armaduras de techo',
+    dimensions: { width: 10.0, height: 3.2, depth: 6.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.colgante',
+    label: '5. Colgante / Suspendida',
+    kind: 'shape',
+    icon: 'building',
+    shapeId: 'struct.colgante',
+    materialId: 'mat.steel',
+    hint: 'Mástiles principales, cables catenarios y tirantes',
+    dimensions: { width: 14.0, height: 6.5, depth: 4.5 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.tensada',
+    label: '6. Tensada / Tracción (Velaria)',
+    kind: 'shape',
+    icon: 'roof',
+    shapeId: 'struct.tensada',
+    materialId: 'mat.plaster',
+    hint: 'Velaria hiperbólica textil con mástiles tensores',
+    dimensions: { width: 10.0, height: 4.5, depth: 10.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.neumatica',
+    label: '7. Neumática / Inflable',
+    kind: 'shape',
+    icon: 'orbit',
+    shapeId: 'struct.neumatica',
+    materialId: 'mat.plaster',
+    hint: 'Domo y pabellón presurizado de geometría curva',
+    dimensions: { width: 10.0, height: 4.8, depth: 8.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.muros_carga',
+    label: '8. Muros de Carga (Rectos / Curvos)',
+    kind: 'shape',
+    icon: 'wall',
+    shapeId: 'struct.muros_carga',
+    materialId: 'mat.concrete',
+    hint: 'Paredes portantes continuas con grosor y aberturas',
+    dimensions: { width: 8.0, height: 3.4, depth: 6.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.laminar',
+    label: '9. Laminar / Cascarón (Candela)',
+    kind: 'shape',
+    icon: 'roof',
+    shapeId: 'struct.laminar',
+    materialId: 'mat.concrete',
+    hint: 'Paraboloide y cascarón delgado continuo de hormigón',
+    dimensions: { width: 11.0, height: 4.2, depth: 11.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.geodesica',
+    label: '10. Cúpula Geodésica',
+    kind: 'shape',
+    icon: 'globe',
+    shapeId: 'struct.geodesica',
+    materialId: 'mat.steel',
+    hint: 'Red geodésica triangulada subdividida con barras y nodos',
+    dimensions: { width: 9.0, height: 4.5, depth: 9.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.espacial',
+    label: '11. Espacial / Tridilosa 3D',
+    kind: 'shape',
+    icon: 'grid',
+    shapeId: 'struct.espacial',
+    materialId: 'mat.steel',
+    hint: 'Malla espacial 3D de barras y nodos esféricos para grandes luces',
+    dimensions: { width: 12.0, height: 3.8, depth: 9.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.plegada',
+    label: '12. Plegada (Origami Estructural)',
+    kind: 'shape',
+    icon: 'layers',
+    shapeId: 'struct.plegada',
+    materialId: 'mat.concrete',
+    hint: 'Cubierta y muros de láminas planas plegadas en zigzag',
+    dimensions: { width: 10.0, height: 3.8, depth: 7.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'struct.voladizo',
+    label: '13. En Voladizo (Cantilever)',
+    kind: 'shape',
+    icon: 'building',
+    shapeId: 'struct.voladizo',
+    materialId: 'mat.concrete',
+    hint: 'Núcleo empotrado con volumen/losa sobresaliente sin apoyo frontal',
+    dimensions: { width: 9.0, height: 4.2, depth: 5.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.cilindro',
+    label: 'Cilindro 3D',
+    kind: 'shape',
+    icon: 'cube',
+    shapeId: 'geo.cilindro',
+    materialId: 'mat.concrete',
+    hint: 'Volumen cilíndrico paramétrico',
+    dimensions: { width: 3.0, height: 3.5, depth: 3.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.anillo',
+    label: 'Anillo / Toroide 3D',
+    kind: 'shape',
+    icon: 'orbit',
+    shapeId: 'geo.anillo',
+    materialId: 'mat.concrete',
+    hint: ' corona anular cilíndrica paramétrica',
+    dimensions: { width: 5.0, height: 1.2, depth: 5.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.muro_curvo',
+    label: 'Muro Curvo / Arco en Planta',
+    kind: 'shape',
+    icon: 'wall',
+    shapeId: 'geo.muro_curvo',
+    materialId: 'mat.concrete',
+    hint: 'Muro cilíndrico curvo con radio y ángulo configurables',
+    dimensions: { width: 6.0, height: 3.0, depth: 6.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.cono',
+    label: 'Cono / Chapitel',
+    kind: 'shape',
+    icon: 'shapes',
+    shapeId: 'geo.cono',
+    materialId: 'mat.stone',
+    hint: 'Geometría cónica paramétrica',
+    dimensions: { width: 4.0, height: 4.2, depth: 4.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.esfera',
+    label: 'Esfera / Domo Esférico',
+    kind: 'shape',
+    icon: 'globe',
+    shapeId: 'geo.esfera',
+    materialId: 'mat.glass',
+    hint: 'Volumen esférico paramétrico',
+    dimensions: { width: 4.0, height: 4.0, depth: 4.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.prisma',
+    label: 'Prisma Poligonal (Hex / Oct)',
+    kind: 'shape',
+    icon: 'cube',
+    shapeId: 'geo.prisma',
+    materialId: 'mat.concrete',
+    hint: 'Prisma regular de N lados configurable',
+    dimensions: { width: 4.0, height: 3.5, depth: 4.0 },
+    modalCategory: 'structural'
+  },
+  {
+    id: 'geo.extrusion',
+    label: 'Extrusión Libre Curva',
+    kind: 'shape',
+    icon: 'shapes',
+    shapeId: 'geo.extrusion',
+    materialId: 'mat.concrete',
+    hint: 'Volumen orgánico extruido con contorno bezier/poligonal',
+    dimensions: { width: 5.0, height: 3.0, depth: 4.0 },
     modalCategory: 'structural'
   },
 
@@ -715,12 +938,50 @@ export function getCustomCatalogEntries(): readonly CatalogEntry[] {
   return customEntries
 }
 
+const CAD_BLOCK_CATALOG_ENTRIES: readonly CatalogEntry[] = CAD_BLOCKS.map((block) => ({
+  id: block.id,
+  label: block.label,
+  kind: 'furniture',
+  icon: (block.category === 'bathrooms'
+    ? 'layers'
+    : block.category === 'bedrooms'
+      ? 'bed'
+      : block.category === 'office'
+        ? 'desk'
+        : block.category === 'exterior'
+          ? 'plant'
+          : block.category === 'dining'
+            ? 'table'
+            : 'sofa') as IconName,
+  shapeId: block.id,
+  materialId: block.defaultMaterialId,
+  hint: block.hint,
+  dimensions: block.dimensions,
+  modalCategory: 'furniture'
+}))
+
 function allEntries(): readonly CatalogEntry[] {
-  return [...PLACEABLE_ENTRIES, ...customEntries, ...MATERIAL_ENTRIES]
+  return [...PLACEABLE_ENTRIES, ...CAD_BLOCK_CATALOG_ENTRIES, ...customEntries, ...MATERIAL_ENTRIES]
 }
 
 export function getCatalogEntry(id: string): CatalogEntry | undefined {
-  return allEntries().find((e) => e.id === id)
+  const found = allEntries().find((e) => e.id === id)
+  if (found) return found
+  const cad = getCadBlock(id)
+  if (cad) {
+    return {
+      id: cad.id,
+      label: cad.label,
+      kind: 'furniture',
+      icon: 'sofa',
+      shapeId: cad.id,
+      materialId: cad.defaultMaterialId,
+      hint: cad.hint,
+      dimensions: cad.dimensions,
+      modalCategory: 'furniture'
+    }
+  }
+  return undefined
 }
 
 export function entriesForCategory(c: CatalogCategory): readonly CatalogEntry[] {
@@ -729,7 +990,9 @@ export function entriesForCategory(c: CatalogCategory): readonly CatalogEntry[] 
     case 'roofs':
       return entries.filter((e) => e.id.startsWith('roof.'))
     case 'shapes':
-      return entries.filter((e) => e.id.startsWith('shape.'))
+      return entries.filter(
+        (e) => e.id.startsWith('shape.') || e.id.startsWith('struct.') || e.id.startsWith('geo.')
+      )
     case 'furniture':
       return entries.filter((e) => e.id.startsWith('furn.') || (e.isCustom && e.modalCategory === 'furniture'))
     case 'openings':
@@ -747,6 +1010,7 @@ export function entriesForModalCategory(cat: ModalElementCategory): readonly Cat
     case 'furniture':
       return [
         ...PLACEABLE_ENTRIES.filter((e) => e.modalCategory === 'furniture'),
+        ...CAD_BLOCK_CATALOG_ENTRIES,
         ...customEntries.filter((e) => e.modalCategory === 'furniture')
       ]
     case 'openings':

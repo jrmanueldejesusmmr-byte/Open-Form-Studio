@@ -225,6 +225,44 @@ export class SceneManager {
     return o
   }
 
+  /** Actualiza paramétricamente una abertura en el muro y su SceneObject vinculado. */
+  updateOpening(wallId: string, openingId: string, patch: Partial<Opening>): Opening | null {
+    const wall = this.walls.find((w) => w.id === wallId)
+    if (!wall) return null
+    const opening = wall.openings.find((o) => o.id === openingId)
+    if (!opening) return null
+
+    if (patch.width !== undefined && patch.width > 0) opening.width = patch.width
+    if (patch.height !== undefined && patch.height > 0) opening.height = patch.height
+    if (patch.sill !== undefined && patch.sill >= 0) opening.sill = patch.sill
+    if (patch.x !== undefined && patch.x > 0) opening.x = patch.x
+    if (patch.style !== undefined) opening.style = patch.style
+    if (patch.swingHand !== undefined) opening.swingHand = patch.swingHand
+    if (patch.swingDirection !== undefined) opening.swingDirection = patch.swingDirection
+    if (patch.openingAngle !== undefined) opening.openingAngle = patch.openingAngle
+    if (patch.materialId !== undefined) opening.materialId = patch.materialId
+
+    this.changedListeners.forEach((fn) => fn(wall))
+    this.wallMovedListeners.forEach((fn) => fn(wall))
+
+    // Sincronizar el SceneObject vinculado si existe
+    const linkedObj = this.objects.find((o) => o.openingId === openingId)
+    if (linkedObj) {
+      linkedObj.size.set(opening.width, opening.height, wall.thickness)
+      if (patch.style !== undefined) {
+        if (opening.type === 'door') linkedObj.doorStyle = patch.style as any
+        else linkedObj.windowStyle = patch.style as any
+      }
+      if (patch.swingHand !== undefined) linkedObj.swingHand = patch.swingHand
+      if (patch.swingDirection !== undefined) linkedObj.swingDirection = patch.swingDirection
+      if (patch.openingAngle !== undefined) linkedObj.openingAngle = patch.openingAngle
+      this.syncObjectWallOpening(linkedObj, false)
+      this.objectMovedListeners.forEach((fn) => fn(linkedObj))
+    }
+
+    return opening
+  }
+
   /** Elimina una abertura del muro y notifica para reconstruir la malla. */
   removeOpening(wallId: string, openingId: string): boolean {
     const wall = this.walls.find((w) => w.id === wallId)
@@ -278,6 +316,31 @@ export class SceneManager {
     this.selected = wall
     if (wall) wall.isSelected = true
     this.selectionListeners.forEach((fn) => fn(wall))
+  }
+
+  /**
+   * Selecciona un conjunto de muros simultáneamente (p. ej. recién generados por
+   * una plantilla 2D o duplicados con Ctrl+D). Si el grupo tiene un único muro,
+   * equivale a `select(walls[0])`; si tiene varios, marca `isSelected = true` en
+   * cada uno manteniendo `selected = null` para que acciones grupales (Rotar 90°,
+   * Duplicar, Borrar) operen sobre el conjunto y un clic posterior elija un lado
+   * individual.
+   */
+  selectWalls(walls: readonly Wall[]): void {
+    const ids = new Set(walls.map((w) => w.id))
+    for (const candidate of this.walls) {
+      candidate.isSelected = ids.has(candidate.id)
+    }
+    for (const candidate of this.objects) {
+      candidate.isSelected = false
+    }
+    if (this.selectedObject) {
+      this.selectedObject = null
+      this.objectSelectionListeners.forEach((fn) => fn(null))
+    }
+    const matched = this.walls.filter((w) => ids.has(w.id))
+    this.selected = matched.length === 1 ? matched[0] : null
+    this.selectionListeners.forEach((fn) => fn(this.selected))
   }
 
   /**
@@ -800,6 +863,95 @@ export class SceneManager {
     this.objectChangedListeners.forEach((fn) => fn(object))
   }
 
+  /**
+   * Actualiza dimensiones, posición, rotación, parámetros estructurales o datos
+   * de terreno de un `SceneObject`, regenerando su malla en el visor (`objectMoved`)
+   * y registrando el paso en el historial salvo que `silent` sea `true`.
+   */
+  updateObject(
+    id: string,
+    patch: {
+      name?: string
+      position?: THREE.Vector3
+      rotationY?: number
+      size?: THREE.Vector3
+      color?: number
+      materialId?: string | null
+      structuralParams?: import('../models/StructuralTypes').StructuralParams | null
+      terrainData?: import('../models/TerrainTypes').TerrainData | null
+      openingVariant?: string | null
+      openingAngle?: number
+      doorStyle?: import('../models/Opening').DoorStyle | null
+      windowStyle?: import('../models/Opening').WindowStyle | null
+      swingHand?: import('../models/Opening').SwingHand
+      swingDirection?: import('../models/Opening').SwingDirection
+      leafMaterialId?: string | null
+      frameMaterialId?: string | null
+      handleVisible?: boolean
+    },
+    silent = false
+  ): SceneObject | null {
+    const object = this.objects.find((candidate) => candidate.id === id)
+    if (!object) return null
+
+    if (patch.name !== undefined && patch.name.trim()) object.name = patch.name.trim()
+    if (patch.position) object.position.copy(patch.position)
+    if (patch.rotationY !== undefined && Number.isFinite(patch.rotationY)) object.rotationY = patch.rotationY
+    if (patch.size) {
+      object.size.set(
+        Math.max(0.05, patch.size.x),
+        Math.max(0.05, patch.size.y),
+        Math.max(0.05, patch.size.z)
+      )
+    }
+    if (patch.color !== undefined && Number.isFinite(patch.color)) object.color = patch.color
+    if (patch.materialId !== undefined) object.materialId = patch.materialId
+    if (patch.structuralParams !== undefined) {
+      object.structuralParams = patch.structuralParams ? { ...patch.structuralParams } : null
+    }
+    if (patch.terrainData !== undefined) {
+      object.terrainData = patch.terrainData
+    }
+    if (patch.openingVariant !== undefined) object.openingVariant = patch.openingVariant
+    if (patch.openingAngle !== undefined && Number.isFinite(patch.openingAngle)) object.openingAngle = patch.openingAngle
+    if (patch.doorStyle !== undefined) object.doorStyle = patch.doorStyle
+    if (patch.windowStyle !== undefined) object.windowStyle = patch.windowStyle
+    if (patch.swingHand !== undefined) object.swingHand = patch.swingHand
+    if (patch.swingDirection !== undefined) object.swingDirection = patch.swingDirection
+    if (patch.leafMaterialId !== undefined) object.leafMaterialId = patch.leafMaterialId
+    if (patch.frameMaterialId !== undefined) object.frameMaterialId = patch.frameMaterialId
+    if (patch.handleVisible !== undefined) object.handleVisible = patch.handleVisible
+
+    // Si tiene un opening asociado en un muro, sincronizarlo
+    if (object.openingId) {
+      const hostWall = this.walls.find((w) => w.openings.some((o) => o.id === object.openingId))
+      const op = hostWall?.openings.find((o) => o.id === object.openingId)
+      if (hostWall && op) {
+        if (patch.size) {
+          op.width = object.size.x
+          op.height = object.size.y
+        }
+        if (patch.doorStyle) op.style = patch.doorStyle
+        if (patch.windowStyle) op.style = patch.windowStyle
+        if (patch.swingHand) op.swingHand = patch.swingHand
+        if (patch.swingDirection) op.swingDirection = patch.swingDirection
+        if (patch.openingAngle !== undefined) op.openingAngle = patch.openingAngle
+        this.wallMovedListeners.forEach((fn) => fn(hostWall))
+        if (!silent) this.changedListeners.forEach((fn) => fn(hostWall))
+      }
+    }
+
+    this.syncObjectWallOpening(object, silent)
+    this.objectMovedListeners.forEach((fn) => fn(object))
+    if (!silent) this.objectChangedListeners.forEach((fn) => fn(object))
+    return object
+  }
+
+  /** Devuelve todos los terrenos topográficos (`topo.terrain`) cargados en la escena. */
+  getTerrains(): SceneObject[] {
+    return this.objects.filter((obj) => obj.shapeId === 'topo.terrain' || obj.terrainData !== null)
+  }
+
   getObject(id: string): SceneObject | undefined {
     return this.objects.find((candidate) => candidate.id === id)
   }
@@ -914,7 +1066,12 @@ export class SceneManager {
       box.expandByPoint(wall.end)
     }
     for (const object of this.objects) {
-      box.expandByPoint(object.position)
+      const halfX = Math.max(0.25, object.size.x / 2)
+      const halfZ = Math.max(0.25, object.size.z / 2)
+      box.expandByPoint(new THREE.Vector3(object.position.x - halfX, object.position.y, object.position.z - halfZ))
+      box.expandByPoint(
+        new THREE.Vector3(object.position.x + halfX, object.position.y + object.size.y, object.position.z + halfZ)
+      )
     }
     return box
   }

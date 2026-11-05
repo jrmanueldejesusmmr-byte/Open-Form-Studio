@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { applyMeterUVs, createMeshMaterial, materialTint } from './MaterialSystem'
 import { wallOpeningMeasures, type OpeningMeasures } from './OpeningMeasures'
-import type { Opening, OpeningPartRole } from '../models/Opening'
+import type { Opening, OpeningPartRole, DoorStyle, WindowStyle, SwingHand, SwingDirection } from '../models/Opening'
 
 export { wallOpeningMeasures }
 export type { OpeningMeasures }
@@ -10,10 +10,16 @@ export type { OpeningMeasures }
 export type WindowVariant = 'fija' | 'corrediza' | 'abatible' | 'dosHojas' | 'cuatroHojas' | 'panoramica'
 
 export type DoorVariant = import('../models/Opening').DoorVariant
-export type { Opening, OpeningPartRole }
+export type { Opening, OpeningPartRole, DoorStyle, WindowStyle, SwingHand, SwingDirection }
 
 export interface DoorOptions {
   variant: DoorVariant
+  /** Estilo arquitectónico (lisa, 6paneles, conVisor, francesa, dobleHoja, celosia). */
+  style?: DoorStyle | null
+  /** Mano de la bisagra (izquierda / derecha). */
+  swingHand?: SwingHand
+  /** Dirección del abatimiento (interior / exterior). */
+  swingDirection?: SwingDirection
   /** Ángulo de apertura de la hoja, en grados (0 cerrado, 90 abierto). */
   openingAngle: number
   /** Material del catálogo para el marco (jambas y dintel). */
@@ -30,6 +36,12 @@ export interface DoorOptions {
 
 export interface WindowOptions {
   variant: WindowVariant
+  /** Estilo arquitectónico (corrediza2, pisoTecho, colonial, abatibleDoble, altaBano). */
+  style?: WindowStyle | null
+  /** Mano de bisagra (izquierda / derecha). */
+  swingHand?: SwingHand
+  /** Dirección de apertura (interior / exterior). */
+  swingDirection?: SwingDirection
   /** Ángulo de apertura de la hoja, en grados (0 cerrado, 90 abierto). */
   openingAngle: number
   /** Material del catálogo para el marco. */
@@ -224,6 +236,189 @@ function buildDoorFrameGeometry(w: number, h: number, wt: number, frameWidth: nu
   return merged
 }
 
+function buildFlushDoorLeafGeometry(leafW: number, leafH: number, lt: number, xCenter: number): THREE.BufferGeometry {
+  const pieces: THREE.BufferGeometry[] = []
+  // Núcleo macizo liso minimalista
+  pieces.push(makeBox(leafW, leafH, lt, xCenter, leafH / 2, 0))
+  // Inlay vertical contemporáneo
+  const edgeW = 0.008
+  pieces.push(makeBox(edgeW, leafH, lt + 0.002, xCenter - leafW / 2 + edgeW / 2, leafH / 2, 0))
+  pieces.push(makeBox(edgeW, leafH, lt + 0.002, xCenter + leafW / 2 - edgeW / 2, leafH / 2, 0))
+  const merged = mergeGeometries(pieces, false)
+  pieces.forEach((p) => p.dispose())
+  merged.computeVertexNormals()
+  return merged
+}
+
+function build6PanelDoorLeafGeometry(leafW: number, leafH: number, lt: number, xCenter: number): THREE.BufferGeometry {
+  const pieces: THREE.BufferGeometry[] = []
+  pieces.push(makeBox(leafW, leafH, lt, xCenter, leafH / 2, 0))
+
+  const stileW = Math.min(0.10, leafW * 0.18)
+  const centerMullionW = Math.min(0.08, leafW * 0.14)
+  const railH = Math.min(0.11, leafH * 0.08)
+  const reliefDepth = 0.008
+  const totalZ = lt + reliefDepth * 2
+
+  // Montante izq, der y central
+  pieces.push(makeBox(stileW, leafH, totalZ, xCenter - leafW / 2 + stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(stileW, leafH, totalZ, xCenter + leafW / 2 - stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(centerMullionW, leafH, totalZ, xCenter, leafH / 2, 0))
+
+  // 4 travesaños horizontales
+  pieces.push(makeBox(leafW, railH * 1.4, totalZ, xCenter, railH * 0.7, 0))
+  pieces.push(makeBox(leafW, railH, totalZ, xCenter, leafH * 0.36, 0))
+  pieces.push(makeBox(leafW, railH, totalZ, xCenter, leafH * 0.68, 0))
+  pieces.push(makeBox(leafW, railH, totalZ, xCenter, leafH - railH / 2, 0))
+
+  // 6 Plafones biselados en 3 filas de 2
+  const panelW = Math.max(0.06, (leafW - stileW * 2 - centerMullionW) / 2 - 0.02)
+  const colLeftX = xCenter - centerMullionW / 2 - panelW / 2 - 0.01
+  const colRightX = xCenter + centerMullionW / 2 + panelW / 2 + 0.01
+
+  const rowYs = [leafH * 0.20, leafH * 0.52, leafH * 0.83]
+  const rowHs = [leafH * 0.22, leafH * 0.24, leafH * 0.22]
+
+  for (let r = 0; r < 3; r++) {
+    const py = rowYs[r]
+    const ph = rowHs[r]
+    pieces.push(makeBox(panelW, ph, lt + reliefDepth * 1.15, colLeftX, py, 0))
+    pieces.push(makeBox(panelW, ph, lt + reliefDepth * 1.15, colRightX, py, 0))
+  }
+
+  const merged = mergeGeometries(pieces, false)
+  pieces.forEach((p) => p.dispose())
+  merged.computeVertexNormals()
+  return merged
+}
+
+function buildVisionDoorLeafGeometry(
+  leafW: number,
+  leafH: number,
+  lt: number,
+  xCenter: number
+): { leafGeo: THREE.BufferGeometry; glassGeo: THREE.BufferGeometry } {
+  const pieces: THREE.BufferGeometry[] = []
+  const visionW = Math.min(0.18, leafW * 0.28)
+  const visionH = Math.min(1.10, leafH * 0.55)
+  const visionY = leafH * 0.58
+
+  // Hojas laterales a los lados de la mirilla
+  const sideW = (leafW - visionW) / 2
+  pieces.push(makeBox(sideW, leafH, lt, xCenter - leafW / 2 + sideW / 2, leafH / 2, 0))
+  pieces.push(makeBox(sideW, leafH, lt, xCenter + leafW / 2 - sideW / 2, leafH / 2, 0))
+
+  // Pieza inferior y superior
+  const bottomH = visionY - visionH / 2
+  const topH = leafH - (visionY + visionH / 2)
+  pieces.push(makeBox(visionW, bottomH, lt, xCenter, bottomH / 2, 0))
+  pieces.push(makeBox(visionW, topH, lt, xCenter, leafH - topH / 2, 0))
+
+  // Marco/junquillo de la mirilla
+  const beadW = 0.015
+  pieces.push(makeBox(beadW, visionH, lt + 0.006, xCenter - visionW / 2 + beadW / 2, visionY, 0))
+  pieces.push(makeBox(beadW, visionH, lt + 0.006, xCenter + visionW / 2 - beadW / 2, visionY, 0))
+  pieces.push(makeBox(visionW, beadW, lt + 0.006, xCenter, visionY - visionH / 2 + beadW / 2, 0))
+  pieces.push(makeBox(visionW, beadW, lt + 0.006, xCenter, visionY + visionH / 2 - beadW / 2, 0))
+
+  const leafGeo = mergeGeometries(pieces, false)
+  pieces.forEach((p) => p.dispose())
+  leafGeo.computeVertexNormals()
+
+  const glassGeo = makeBox(visionW - beadW * 2, visionH - beadW * 2, 0.01, xCenter, visionY, 0)
+  return { leafGeo, glassGeo }
+}
+
+function buildFrenchDoorLeafGeometry(
+  leafW: number,
+  leafH: number,
+  lt: number,
+  xCenter: number
+): { leafGeo: THREE.BufferGeometry; glassGeo: THREE.BufferGeometry } {
+  const pieces: THREE.BufferGeometry[] = []
+  const stileW = Math.min(0.09, leafW * 0.16)
+  const bottomRailH = Math.min(0.24, leafH * 0.15)
+  const topRailH = Math.min(0.12, leafH * 0.08)
+
+  // Bastidor perimetral
+  pieces.push(makeBox(stileW, leafH, lt, xCenter - leafW / 2 + stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(stileW, leafH, lt, xCenter + leafW / 2 - stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(leafW - stileW * 2, bottomRailH, lt, xCenter, bottomRailH / 2, 0))
+  pieces.push(makeBox(leafW - stileW * 2, topRailH, lt, xCenter, leafH - topRailH / 2, 0))
+
+  // Muntins / cuadrícula (1 parteluz vertical y 3 travesaños horizontales = 8 paneles)
+  const gridW = leafW - stileW * 2
+  const gridH = leafH - bottomRailH - topRailH
+  const gridCenterY = bottomRailH + gridH / 2
+  const muntinW = 0.022
+
+  pieces.push(makeBox(muntinW, gridH, lt + 0.004, xCenter, gridCenterY, 0))
+  for (let i = 1; i <= 3; i++) {
+    const my = bottomRailH + (gridH * i) / 4
+    pieces.push(makeBox(gridW, muntinW, lt + 0.004, xCenter, my, 0))
+  }
+
+  const leafGeo = mergeGeometries(pieces, false)
+  pieces.forEach((p) => p.dispose())
+  leafGeo.computeVertexNormals()
+
+  const glassGeo = makeBox(gridW, gridH, 0.01, xCenter, gridCenterY, 0)
+  return { leafGeo, glassGeo }
+}
+
+function buildLatticeDoorLeafGeometry(
+  leafW: number,
+  leafH: number,
+  lt: number,
+  xCenter: number
+): THREE.BufferGeometry {
+  const pieces: THREE.BufferGeometry[] = []
+  pieces.push(makeBox(leafW, leafH, lt, xCenter, leafH / 2, 0))
+
+  const stileW = Math.min(0.10, leafW * 0.18)
+  const railH = Math.min(0.12, leafH * 0.08)
+  const reliefDepth = 0.01
+  const totalZ = lt + reliefDepth * 2
+
+  // Bastidor
+  pieces.push(makeBox(stileW, leafH, totalZ, xCenter - leafW / 2 + stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(stileW, leafH, totalZ, xCenter + leafW / 2 - stileW / 2, leafH / 2, 0))
+  pieces.push(makeBox(leafW, railH * 1.5, totalZ, xCenter, railH * 0.75, 0))
+  pieces.push(makeBox(leafW, railH, totalZ, xCenter, leafH * 0.45, 0))
+  pieces.push(makeBox(leafW, railH, totalZ, xCenter, leafH - railH / 2, 0))
+
+  // Celosía con barras cruzadas en 'X' en el panel superior e inferior
+  const bayW = leafW - stileW * 2
+  const lowerBayH = leafH * 0.45 - railH * 1.5
+  const upperBayH = leafH - railH - (leafH * 0.45 + railH / 2)
+  const barW = 0.035
+
+  const lowerCY = railH * 1.5 + lowerBayH / 2
+  const lowerDiag = Math.hypot(bayW, lowerBayH)
+  const lowerAngle = Math.atan2(lowerBayH, bayW)
+
+  const bar1 = makeBox(lowerDiag, barW, totalZ * 1.05, xCenter, lowerCY, 0)
+  bar1.rotateZ(lowerAngle)
+  const bar2 = makeBox(lowerDiag, barW, totalZ * 1.05, xCenter, lowerCY, 0)
+  bar2.rotateZ(-lowerAngle)
+  pieces.push(bar1, bar2)
+
+  const upperCY = leafH * 0.45 + railH / 2 + upperBayH / 2
+  const upperDiag = Math.hypot(bayW, upperBayH)
+  const upperAngle = Math.atan2(upperBayH, bayW)
+
+  const bar3 = makeBox(upperDiag, barW, totalZ * 1.05, xCenter, upperCY, 0)
+  bar3.rotateZ(upperAngle)
+  const bar4 = makeBox(upperDiag, barW, totalZ * 1.05, xCenter, upperCY, 0)
+  bar4.rotateZ(-upperAngle)
+  pieces.push(bar3, bar4)
+
+  const merged = mergeGeometries(pieces, false)
+  pieces.forEach((p) => p.dispose())
+  merged.computeVertexNormals()
+  return merged
+}
+
 /**
  * Construye una hoja de puerta arquitectónica con relieve de plafones/molduras
  * centrada en `xCenter`, con ancho `leafW`, alto `leafH` y espesor `lt`.
@@ -380,6 +575,11 @@ export function buildDoor(
   const innerW = w - f * 2
   const innerH = h - f
 
+  const chosenStyle: DoorStyle = options.style ?? (variant === 'doble' ? 'dobleHoja' : 'lisa')
+  const swingHand: SwingHand = options.swingHand ?? 'left'
+  const swingDirection: SwingDirection = options.swingDirection ?? 'in'
+  const dirSign = swingDirection === 'in' ? 1 : -1
+
   const addSwingingLeaf = (
     xMin: number,
     xMax: number,
@@ -393,8 +593,10 @@ export function buildDoor(
     const handleX = hingeX <= xCenter ? xMax - 0.065 : xMin + 0.065
     const handleY = Math.min(innerH * 0.48, 1.0)
 
-    if (withGlassInsert) {
-      // Hoja con bastidor perimetral y gran cristal central (vidrio / puerta-ventana)
+    let leafGeo: THREE.BufferGeometry
+    let glassGeo: THREE.BufferGeometry | null = null
+
+    if (withGlassInsert || variant === 'vidrio' || variant === 'puerta-ventana') {
       const stile = Math.min(0.09, lw * 0.18)
       const bottomRail = variant === 'puerta-ventana' ? innerH * 0.32 : stile
       const topRail = stile
@@ -404,21 +606,36 @@ export function buildDoor(
         makeBox(lw - stile * 2, bottomRail, lt, xCenter, bottomRail / 2, 0),
         makeBox(lw - stile * 2, topRail, lt, xCenter, innerH - topRail / 2, 0)
       ]
-      const leafFrameGeo = mergeGeometries(framePieces, false)
+      leafGeo = mergeGeometries(framePieces, false)
       framePieces.forEach((p) => p.dispose())
-      if (swingDeg !== 0) swingAroundY(leafFrameGeo, swingDeg, hingeX, 0)
-      parts.push({ geometry: leafFrameGeo, material: leafMat, role: 'leaf' })
 
       const glassW = Math.max(0.05, lw - stile * 2)
       const glassH = Math.max(0.05, innerH - bottomRail - topRail)
       const glassY = bottomRail + glassH / 2
-      const glassGeo = makeBox(glassW, glassH, 0.01, xCenter, glassY, 0)
+      glassGeo = makeBox(glassW, glassH, 0.01, xCenter, glassY, 0)
+    } else if (chosenStyle === '6paneles' || chosenStyle === 'dobleHoja') {
+      leafGeo = build6PanelDoorLeafGeometry(lw, innerH, lt, xCenter)
+    } else if (chosenStyle === 'conVisor') {
+      const res = buildVisionDoorLeafGeometry(lw, innerH, lt, xCenter)
+      leafGeo = res.leafGeo
+      glassGeo = res.glassGeo
+    } else if (chosenStyle === 'francesa') {
+      const res = buildFrenchDoorLeafGeometry(lw, innerH, lt, xCenter)
+      leafGeo = res.leafGeo
+      glassGeo = res.glassGeo
+    } else if (chosenStyle === 'celosia') {
+      leafGeo = buildLatticeDoorLeafGeometry(lw, innerH, lt, xCenter)
+    } else {
+      // 'lisa' o variante lisa moderna
+      leafGeo = buildFlushDoorLeafGeometry(lw, innerH, lt, xCenter)
+    }
+
+    if (swingDeg !== 0) swingAroundY(leafGeo, swingDeg, hingeX, 0)
+    parts.push({ geometry: leafGeo, material: leafMat, role: 'leaf' })
+
+    if (glassGeo) {
       if (swingDeg !== 0) swingAroundY(glassGeo, swingDeg, hingeX, 0)
       parts.push({ geometry: glassGeo, material: glassMat, role: 'glass' })
-    } else {
-      const leafGeo = buildPanelDoorLeafGeometry(lw, innerH, lt, xCenter)
-      if (swingDeg !== 0) swingAroundY(leafGeo, swingDeg, hingeX, 0)
-      parts.push({ geometry: leafGeo, material: leafMat, role: 'leaf' })
     }
 
     const hingesGeo = buildDoorHingesGeometry(hingeX, innerH, lt)
@@ -429,9 +646,12 @@ export function buildDoor(
     parts.push({ geometry: handleGeo, material: handleMat, role: 'handle' })
   }
 
-  if (variant === 'doble') {
-    addSwingingLeaf(-innerW / 2, 0, -innerW / 2, angle, false)
-    addSwingingLeaf(0, innerW / 2, innerW / 2, -angle, false)
+  const isDoubleDoor = variant === 'doble' || chosenStyle === 'dobleHoja'
+
+  if (isDoubleDoor) {
+    // Puerta doble: ambas hojas abren simétricamente
+    addSwingingLeaf(-innerW / 2, 0, -innerW / 2, dirSign * angle, false)
+    addSwingingLeaf(0, innerW / 2, innerW / 2, -dirSign * angle, false)
   } else if (variant === 'corrediza') {
     // Dos hojas corredizas (una fija acristalada/madera y una móvil traslapada)
     const halfW = innerW * 0.52
@@ -458,10 +678,14 @@ export function buildDoor(
     const handleGeo = buildDoorHandleAssembly(0, 0.95, lt, 1)
     parts.push({ geometry: handleGeo, material: handleMat, role: 'handle' })
   } else if (variant === 'vidrio' || variant === 'puerta-ventana') {
-    addSwingingLeaf(-innerW / 2, innerW / 2, -innerW / 2, angle, true)
+    const hingeX = swingHand === 'left' ? -innerW / 2 : innerW / 2
+    const swingDeg = swingHand === 'left' ? dirSign * angle : -dirSign * angle
+    addSwingingLeaf(-innerW / 2, innerW / 2, hingeX, swingDeg, true)
   } else {
-    // Puerta simple estándar con hoja plafonada, marco y manija metálica
-    addSwingingLeaf(-innerW / 2, innerW / 2, -innerW / 2, angle, false)
+    // Puerta simple: respeta la bisagra elegida (izquierda/derecha) y apertura elegida (in/out)
+    const hingeX = swingHand === 'left' ? -innerW / 2 : innerW / 2
+    const swingDeg = swingHand === 'left' ? dirSign * angle : -dirSign * angle
+    addSwingingLeaf(-innerW / 2, innerW / 2, hingeX, swingDeg, false)
   }
 
   return mergeParts(parts)
@@ -567,12 +791,51 @@ export function buildWindow(
   const y0 = f
   const y1 = h - f
 
-  if (variant === 'corrediza' || variant === 'dosHojas') {
-    // Dos hojas con parteluz central y manilla cromada
-    addWindowSash(-innerW / 2, 0.01, y0, y1, -0.012, 0)
-    addWindowSash(-0.01, innerW / 2, y0, y1, 0.012, 0)
-    // Manilla / cierre central cromado
-    const latch = makeBox(0.016, 0.08, 0.035, 0, h / 2, sashDepth * 0.7)
+  const chosenStyle: WindowStyle = options.style ?? (variant === 'corrediza' || variant === 'dosHojas' ? 'corrediza2' : 'corrediza2')
+  const swingHand: SwingHand = options.swingHand ?? 'left'
+  const swingDirection: SwingDirection = options.swingDirection ?? 'in'
+  const dirSign = swingDirection === 'in' ? 1 : -1
+
+  if (chosenStyle === 'colonial') {
+    // Ventana con cuadrícula colonial tradicional (muntins 2 columnas x 3 filas)
+    addWindowSash(-innerW / 2, innerW / 2, y0, y1, 0, 0)
+    // Muntins
+    const muntinPieces: THREE.BufferGeometry[] = []
+    const mProfile = 0.02
+    // Parteluz vertical
+    muntinPieces.push(makeBox(mProfile, innerH, sashDepth * 0.9, 0, (y0 + y1) / 2, 0))
+    // Travesaños horizontales
+    muntinPieces.push(makeBox(innerW, mProfile, sashDepth * 0.9, 0, y0 + innerH * 0.33, 0))
+    muntinPieces.push(makeBox(innerW, mProfile, sashDepth * 0.9, 0, y0 + innerH * 0.67, 0))
+    const muntinGeo = mergeGeometries(muntinPieces, false)
+    muntinPieces.forEach((p) => p.dispose())
+    parts.push({ geometry: muntinGeo, material: frameMat, role: 'muntin' })
+  } else if (chosenStyle === 'pisoTecho') {
+    // Ventanal de piso a techo: gran paño de cristal panorámico con travesaño superior
+    const transomY = y0 + innerH * 0.78
+    // Travesaño
+    const transomGeo = makeBox(innerW, sashProfile, sashDepth, 0, transomY, 0)
+    parts.push({ geometry: transomGeo, material: frameMat, role: 'muntin' })
+    // Hoja inferior panorámica
+    addWindowSash(-innerW / 2, innerW / 2, y0, transomY - sashProfile / 2, 0, 0)
+    // Hoja superior
+    addWindowSash(-innerW / 2, innerW / 2, transomY + sashProfile / 2, y1, 0, 0)
+  } else if (chosenStyle === 'abatibleDoble') {
+    // Abatible doble: dos hojas que abren hacia los lados
+    addWindowSash(-innerW / 2, 0, y0, y1, 0, dirSign * angle)
+    addWindowSash(0, innerW / 2, y0, y1, 0, -dirSign * angle)
+    const latchL = makeBox(0.016, 0.08, 0.035, -0.02, h / 2, sashDepth * 0.7)
+    const latchR = makeBox(0.016, 0.08, 0.035, 0.02, h / 2, sashDepth * 0.7)
+    if (angle !== 0) {
+      swingAroundY(latchL, dirSign * angle, -innerW / 2, 0)
+      swingAroundY(latchR, -dirSign * angle, innerW / 2, 0)
+    }
+    parts.push({ geometry: latchL, material: hardwareMat, role: 'handle' })
+    parts.push({ geometry: latchR, material: hardwareMat, role: 'handle' })
+  } else if (chosenStyle === 'altaBano') {
+    // Ventana alta de baño: diseño compacto con hoja basculante/proyectante
+    addWindowSash(-innerW / 2, innerW / 2, y0, y1, 0, dirSign * (angle * 0.6))
+    const latch = makeBox(0.018, 0.07, 0.035, 0, y0 + 0.04, sashDepth * 0.7)
     parts.push({ geometry: latch, material: hardwareMat, role: 'handle' })
   } else if (variant === 'cuatroHojas') {
     const midY = f + innerH / 2
@@ -583,13 +846,18 @@ export function buildWindow(
     const latch = makeBox(0.018, 0.08, 0.035, 0, midY, sashDepth * 0.7)
     parts.push({ geometry: latch, material: hardwareMat, role: 'handle' })
   } else if (variant === 'abatible') {
-    addWindowSash(-innerW / 2, innerW / 2, y0, y1, 0, angle)
-    const latch = makeBox(0.016, 0.08, 0.035, innerW / 2 - sashProfile * 0.5, h / 2, sashDepth * 0.7)
-    if (angle !== 0) swingAroundY(latch, angle, -innerW / 2, 0)
+    const hingeX = swingHand === 'left' ? -innerW / 2 : innerW / 2
+    const swingDeg = swingHand === 'left' ? dirSign * angle : -dirSign * angle
+    addWindowSash(-innerW / 2, innerW / 2, y0, y1, 0, swingDeg)
+    const latch = makeBox(0.016, 0.08, 0.035, swingHand === 'left' ? innerW / 2 - sashProfile * 0.5 : -innerW / 2 + sashProfile * 0.5, h / 2, sashDepth * 0.7)
+    if (angle !== 0) swingAroundY(latch, swingDeg, hingeX, 0)
     parts.push({ geometry: latch, material: hardwareMat, role: 'handle' })
   } else {
-    // Ventana fija o panorámica
-    addWindowSash(-innerW / 2, innerW / 2, y0, y1, 0, 0)
+    // Corrediza 2 hojas clásica (estándar arquitectónico)
+    addWindowSash(-innerW / 2, 0.01, y0, y1, -0.012, 0)
+    addWindowSash(-0.01, innerW / 2, y0, y1, 0.012, 0)
+    const latch = makeBox(0.016, 0.08, 0.035, 0, h / 2, sashDepth * 0.7)
+    parts.push({ geometry: latch, material: hardwareMat, role: 'handle' })
   }
 
   return mergeParts(parts)

@@ -9,7 +9,7 @@
  */
 const MESSAGES = {
   /* --- Marca y contenedores --- */
-  'app.name': 'ArqStudio 3D',
+  'app.name': 'Open Form Studio',
   'app.subtitle': 'Herramientas AEC',
   'app.workspaceLabel': 'Espacio de trabajo 3D interactivo',
   'status.ready': 'Listo',
@@ -39,6 +39,7 @@ const MESSAGES = {
 
   /* --- Secciones (acordeones) --- */
   'section.designTools': 'Herramientas de diseño',
+  'section.wallTemplates': 'Atajos de Plantillas de Muros 2D',
   'section.modifiers': 'Modificadores',
   'section.roofTypes': 'Tipos de techos',
   'section.materials': 'Paleta de materiales',
@@ -79,6 +80,7 @@ const MESSAGES = {
   'action.edit.undo': 'Deshacer',
   'action.edit.redo': 'Rehacer',
   'action.edit.copy': 'Copiar',
+  'action.edit.duplicate': 'Duplicar selección',
   'action.edit.cut': 'Recortar',
   'action.edit.delete': 'Borrar',
   'action.edit.selectAll': 'Seleccionar todo',
@@ -86,7 +88,15 @@ const MESSAGES = {
   /* --- Acciones: Dibujo --- */
   'action.tool.simpleWall': 'Muro simple',
   'action.tool.structuralSegment': 'Segmento estructural',
-  'action.tool.roomWalls': 'Muros de habitación',
+  'action.tool.roomWalls': 'Habitación Rectangular',
+  'action.template.rect': 'Habitación Rectangular',
+  'action.template.l': 'Plantilla Perfil L',
+  'action.template.u': 'Plantilla Perfil U',
+  'action.template.c': 'Plantilla Perfil C',
+  'action.template.t': 'Plantilla Perfil T',
+  'action.template.cross': 'Plantilla Cruz (+)',
+  'action.template.ring': 'Anillo / Muro Circular',
+  'action.template.arc': 'Muro en Arco',
   'action.tool.roof': 'Cubierta / techo',
   'action.tool.slab': 'Losa / forjado',
 
@@ -114,8 +124,9 @@ const MESSAGES = {
 
   /* --- Acciones: Modificadores --- */
   'action.modify.move': 'Mover',
+  'action.modify.rotate90': 'Rotar 90°',
   'action.modify.trim': 'Recortar',
-  'action.modify.copy': 'Copiar',
+  'action.modify.copy': 'Duplicar',
   'action.modify.erase': 'Borrar',
   'action.modify.zoom': 'Zoom',
 
@@ -151,6 +162,7 @@ const MESSAGES = {
   /* --- Acciones: Vistas --- */
   'action.aux.2d': 'Vista 2D (planta)',
   'action.aux.3d': 'Vista 3D',
+  'action.view.toggle2d3d': 'Alternar Vista 2D / 3D',
   'action.aux.fit': 'Ajustar a pantalla',
   'action.aux.reset': 'Restablecer vista',
   'action.aux.top': 'Vista superior',
@@ -166,6 +178,7 @@ const MESSAGES = {
   'action.aids.ortho': 'Modo ortogonal',
   'action.aids.polar': 'Seguimiento polar',
   'action.aids.layers': 'Panel de capas y propiedades',
+  'action.help.shortcuts': 'Atajos de teclado',
 
   /* --- Acciones: Paleta de comandos --- */
   'action.view.commandPalette': 'Paleta de comandos',
@@ -174,7 +187,7 @@ const MESSAGES = {
   'action.view.toggleToolbox': 'Herramientas AEC',
   'action.view.toggleLayers': 'Capas y Propiedades',
   'action.view.toggleNavigator': 'Navegador del Proyecto',
-  'action.view.toggleCosts': 'Costos / Presupuesto',
+  'action.view.toggleCosts': 'Tabla Maestra BIM, Cuantificación y Costos',
   'action.view.toggleChat': 'Chat de IA',
   'action.view.toggleTimeline': 'Línea de tiempo',
   'action.view.focusMode': 'Modo concentración',

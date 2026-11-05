@@ -208,6 +208,7 @@ if (!gotTheLock) {
  */
 function createWindow(): void {
   const win = new BrowserWindow({
+    title: 'Open Form Studio',
     width: 1440,
     height: 920,
     minWidth: 1024,

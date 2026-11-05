@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { SceneManager } from '../engine/SceneManager'
 import { Viewport3DController } from '../engine/Viewport3DController'
-import { buildGrid } from '../engine/GridBuilder'
+import { buildWorkspaceGridSystem, type WorkspaceGridSystem } from '../engine/GridBuilder'
 import { buildObjectMesh, buildWallMesh, SELECTED_COLOR } from '../engine/WallMeshBuilder'
 import {
   disposeMaterialLibrary,
@@ -14,6 +15,10 @@ import {
 import { Layer } from '../models/Layer'
 import { Wall, WallSegmentType } from '../models/Wall'
 import { SceneObject } from '../models/SceneObject'
+import { isRadialStructuralShape } from '../models/StructuralTypes'
+import { themeManager } from '../services/ThemeManager'
+
+export type TransformGizmoMode = 'translate' | 'rotate' | 'scale'
 
 /** Proyección del lienzo: `3d` = perspectiva orbital, `2d` = planta ortográfica. */
 export type ViewMode = '2d' | '3d'
@@ -27,6 +32,17 @@ function materialArray(material: THREE.Material | THREE.Material[]): THREE.Mater
 /** Descarta un material o array de materiales de forma segura. */
 function disposeMaterial(material: THREE.Material | THREE.Material[]): void {
   for (const m of materialArray(material)) m.dispose()
+}
+/** Libera geometrías y materiales de los hijos adjuntos (p. ej. curvas de nivel de un terreno). */
+function disposeObjectChildren(root: THREE.Object3D): void {
+  for (const child of [...root.children]) {
+    child.traverse((node) => {
+      const maybeMesh = node as THREE.Mesh
+      if (maybeMesh.geometry) maybeMesh.geometry.dispose()
+      if (maybeMesh.material) disposeMaterial(maybeMesh.material)
+    })
+    root.remove(child)
+  }
 }
 /** Tiñe un material o array de materiales con el color indicado. */
 function tintMaterial(material: THREE.Material | THREE.Material[], hex: number): void {
@@ -94,11 +110,35 @@ export class ViewportRenderer {
   private previewMarker: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null
   /** Previsualización de polígono (contorno del techo en trazo). */
   private previewPolygon: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> | null = null
+  /** Previsualización fantasma (ghost wireframe + volumen traslúcido) de plantillas de muros 2D. */
+  private previewTemplateGroup: THREE.Group | null = null
+  private previewTemplateLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial> | null = null
+  private previewTemplateFill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null = null
+  private previewSnapRing: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null = null
+  /** Nodos de estiramiento en los extremos de un muro individual seleccionado. */
+  private wallEndpointStartGrip: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null
+  private wallEndpointEndGrip: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null
   private readonly wallTypes = new Map<string, WallSegmentType>()
   private readonly layerStates = new Map<WallSegmentType, LayerState>()
   private readonly raycaster = new THREE.Raycaster()
   private readonly pointerNdc = new THREE.Vector2()
-  private readonly grid: THREE.LineSegments
+  private readonly gridSystem: WorkspaceGridSystem
+  private userGridVisible = true
+  private shadowGround: THREE.Mesh<THREE.PlaneGeometry, THREE.ShadowMaterial>
+  private unsubscribeTheme: (() => void) | null = null
+  private transformControls: TransformControls | null = null
+  private readonly gizmoAnchor = new THREE.Object3D()
+  private gizmoEnabled = true
+  private gizmoBaseObjSize = new THREE.Vector3(1, 1, 1)
+  private gizmoBaseWall: {
+    start: THREE.Vector3
+    end: THREE.Vector3
+    height: number
+    thickness: number
+    mid: THREE.Vector3
+    baseAngle: number
+  } | null = null
+  private gizmoLiveChangeListeners: Array<() => void> = []
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private aspect = 1
   private viewMode: ViewMode = '3d'
@@ -111,6 +151,8 @@ export class ViewportRenderer {
   private envTexture: THREE.Texture | null = null
   /** Referencia estable al handler de `resize`, para poder quitarlo en `dispose()`. */
   private readonly onWindowResize = (): void => this.resize()
+  private readonly beforeRenderListeners: Array<(dt: number) => void> = []
+  private lastFrameTime = performance.now()
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -167,32 +209,53 @@ export class ViewportRenderer {
     this.scene.add(rim)
 
     // Suelo que solo recoge sombras (transparente fuera de ellas): hace visibles
-    // las sombras del edificio sin tapar el fondo en degradado.
-    const shadowGround = new THREE.Mesh(
+    // las sombras del edificio sin tapar el fondo del tema.
+    this.shadowGround = new THREE.Mesh(
       new THREE.PlaneGeometry(1200, 1200),
-      new THREE.ShadowMaterial({ opacity: 0.4 })
+      new THREE.ShadowMaterial({ opacity: 0.35 })
     )
-    shadowGround.rotation.x = -Math.PI / 2
-    shadowGround.position.y = 0
-    shadowGround.receiveShadow = true
-    this.scene.add(shadowGround)
+    this.shadowGround.rotation.x = -Math.PI / 2
+    this.shadowGround.position.y = 0
+    this.shadowGround.receiveShadow = true
+    this.scene.add(this.shadowGround)
 
-    this.grid = buildGrid()
-    this.scene.add(this.grid)
+    this.gridSystem = buildWorkspaceGridSystem(60, 1)
+    this.scene.add(this.gridSystem.group)
+    this.applySceneTheme()
+    this.unsubscribeTheme = themeManager.subscribe(() => this.applySceneTheme())
+
+    this.scene.add(this.gizmoAnchor)
+    this.initTransformControls()
 
     sceneManager.onWallAdded((wall) => this.onWallAdded(wall))
     sceneManager.onWallRemoved((wall) => this.onWallRemoved(wall))
     // `onWallMoved` (no `onWallChanged`) también llega durante los arrastres
     // silenciosos, de modo que la malla sigue al cursor sin ensuciar el historial.
-    sceneManager.onWallMoved((wall) => this.onWallChanged(wall))
+    sceneManager.onWallMoved((wall) => {
+      this.onWallChanged(wall)
+      this.syncWallEndpointGrips()
+      if (!this.isTransformGizmoDragging()) this.syncTransformGizmoAnchor()
+    })
     sceneManager.onObjectAdded((object) => this.onObjectAdded(object))
     sceneManager.onObjectRemoved((object) => this.onObjectRemoved(object))
-    sceneManager.onObjectMoved((object) => this.onObjectChanged(object))
-    sceneManager.onObjectChanged((object) => this.onObjectChanged(object))
+    sceneManager.onObjectMoved((object) => {
+      this.onObjectChanged(object)
+      if (!this.isTransformGizmoDragging()) this.syncTransformGizmoAnchor()
+    })
+    sceneManager.onObjectChanged((object) => {
+      this.onObjectChanged(object)
+      if (!this.isTransformGizmoDragging()) this.syncTransformGizmoAnchor()
+    })
     // La selección es un estado "visual" que vive en el modelo: al cambiar se
     // repintan los materiales en lugar de recrear geometría.
-    sceneManager.onSelectionChanged(() => this.paintSelection())
-    sceneManager.onObjectSelectionChanged(() => this.paintSelection())
+    sceneManager.onSelectionChanged(() => {
+      this.paintSelection()
+      this.syncTransformGizmoAnchor()
+    })
+    sceneManager.onObjectSelectionChanged(() => {
+      this.paintSelection()
+      this.syncTransformGizmoAnchor()
+    })
     // Pisos: al cambiar la estructura, el activo o la visibilidad se repinta
     // la atenuación (40 %) y los ojos por piso en todas las mallas.
     sceneManager.onLevelsChanged(() => this.refreshLevelVisuals())
@@ -250,6 +313,224 @@ export class ViewportRenderer {
   setViewMode(mode: ViewMode): void {
     this.viewMode = mode
     this.syncCamera()
+    if (this.transformControls) {
+      this.transformControls.camera = this.activeCamera
+    }
+  }
+
+  /**
+   * Sincroniza `scene.background`, `THREE.GridHelper` y la matriz de puntos 3D
+   * con el tema activo y el estilo de fondo de trabajo (`grid`, `dots`, `solid`).
+   */
+  private applySceneTheme(): void {
+    const cfg = themeManager.getConfig()
+    const themeDef = themeManager.getThemeDef()
+    this.scene.background = new THREE.Color(themeDef.sceneBg)
+    this.shadowGround.material.opacity = themeDef.colorScheme === 'light' ? 0.2 : 0.38
+    this.gridSystem.updateTheme(themeDef, cfg.workBgStyle, this.userGridVisible)
+  }
+
+  private initTransformControls(): void {
+    try {
+      const tc = new TransformControls(this.activeCamera, this.canvas)
+      tc.setSize(0.85)
+      tc.setMode('translate')
+      this.transformControls = tc
+      this.scene.add(tc)
+
+      tc.addEventListener('objectChange', () => {
+        this.applyGizmoAnchorTransform(true)
+        this.gizmoLiveChangeListeners.forEach((fn) => fn())
+      })
+
+      tc.addEventListener('dragging-changed', (event) => {
+        const isDragging = Boolean(event.value)
+        if (isDragging) {
+          this.captureGizmoBaseState()
+        } else {
+          this.applyGizmoAnchorTransform(false)
+          this.syncTransformGizmoAnchor()
+          this.gizmoLiveChangeListeners.forEach((fn) => fn())
+        }
+      })
+    } catch {
+      // En entornos headless sin DOM de eventos completos se degrada sin gizmo
+      this.transformControls = null
+    }
+  }
+
+  private captureGizmoBaseState(): void {
+    const obj = this.sceneManager.getSelectedObject()
+    if (obj) {
+      this.gizmoBaseObjSize.copy(obj.size)
+      this.gizmoBaseWall = null
+      return
+    }
+    const wall = this.sceneManager.getSelected()
+    if (wall) {
+      const mid = new THREE.Vector3().addVectors(wall.start, wall.end).multiplyScalar(0.5)
+      const dx = wall.end.x - wall.start.x
+      const dz = wall.end.z - wall.start.z
+      this.gizmoBaseWall = {
+        start: wall.start.clone(),
+        end: wall.end.clone(),
+        height: wall.height,
+        thickness: wall.thickness,
+        mid,
+        baseAngle: -Math.atan2(dz, dx)
+      }
+    }
+  }
+
+  private applyGizmoAnchorTransform(silent: boolean): void {
+    if (!this.transformControls) return
+    const mode = this.transformControls.getMode()
+    const obj = this.sceneManager.getSelectedObject()
+    if (obj) {
+      const nextPos = this.gizmoAnchor.position.clone()
+      const euler = new THREE.Euler().setFromQuaternion(this.gizmoAnchor.quaternion, 'YXZ')
+      const nextRotY = mode === 'rotate' ? euler.y : obj.rotationY
+      const nextSize = obj.size.clone()
+
+      if (mode === 'scale') {
+        nextSize.set(
+          Math.max(0.1, Math.round(this.gizmoBaseObjSize.x * Math.abs(this.gizmoAnchor.scale.x) * 100) / 100),
+          Math.max(0.1, Math.round(this.gizmoBaseObjSize.y * Math.abs(this.gizmoAnchor.scale.y) * 100) / 100),
+          Math.max(0.1, Math.round(this.gizmoBaseObjSize.z * Math.abs(this.gizmoAnchor.scale.z) * 100) / 100)
+        )
+      }
+
+      let nextStructParams = obj.structuralParams ? { ...obj.structuralParams } : undefined
+      if (mode === 'scale' && nextStructParams && isRadialStructuralShape(obj.shapeId, nextStructParams.subType)) {
+        nextStructParams = {
+          ...nextStructParams,
+          radius: Math.round(((nextSize.x + nextSize.z) / 4) * 100) / 100
+        }
+      }
+
+      this.sceneManager.updateObject(
+        obj.id,
+        {
+          position: nextPos,
+          rotationY: nextRotY,
+          size: nextSize,
+          ...(nextStructParams ? { structuralParams: nextStructParams } : {})
+        },
+        silent
+      )
+      return
+    }
+
+    const wall = this.sceneManager.getSelected()
+    if (wall && this.gizmoBaseWall) {
+      const base = this.gizmoBaseWall
+      if (mode === 'translate') {
+        const delta = new THREE.Vector3().subVectors(this.gizmoAnchor.position, base.mid)
+        delta.y = 0 // Los muros mantienen la elevación de su piso salvo cambio de nivel
+        this.sceneManager.moveWall(
+          wall.id,
+          base.start.clone().add(delta),
+          base.end.clone().add(delta),
+          silent
+        )
+      } else if (mode === 'rotate') {
+        const euler = new THREE.Euler().setFromQuaternion(this.gizmoAnchor.quaternion, 'YXZ')
+        const dAngle = euler.y - base.baseAngle
+        const cos = Math.cos(-dAngle)
+        const sin = Math.sin(-dAngle)
+        const rotPt = (pt: THREE.Vector3): THREE.Vector3 => {
+          const rx = pt.x - base.mid.x
+          const rz = pt.z - base.mid.z
+          return new THREE.Vector3(base.mid.x + rx * cos - rz * sin, pt.y, base.mid.z + rx * sin + rz * cos)
+        }
+        this.sceneManager.moveWall(wall.id, rotPt(base.start), rotPt(base.end), silent)
+      } else if (mode === 'scale') {
+        const sx = Math.max(0.15, Math.abs(this.gizmoAnchor.scale.x))
+        const sy = Math.max(0.15, Math.abs(this.gizmoAnchor.scale.y))
+        const sz = Math.max(0.25, Math.abs(this.gizmoAnchor.scale.z))
+        const halfVec = new THREE.Vector3().subVectors(base.end, base.start).multiplyScalar(0.5 * sx)
+        wall.height = Math.max(0.3, Math.round(base.height * sy * 100) / 100)
+        wall.thickness = Math.max(0.05, Math.round(base.thickness * sz * 100) / 100)
+        this.sceneManager.moveWall(
+          wall.id,
+          base.mid.clone().sub(halfVec),
+          base.mid.clone().add(halfVec),
+          silent
+        )
+      }
+    }
+  }
+
+  syncTransformGizmoAnchor(): void {
+    const tc = this.transformControls
+    if (!tc) return
+    if (!this.gizmoEnabled) {
+      tc.detach()
+      return
+    }
+    const obj = this.sceneManager.getSelectedObject()
+    if (obj && obj.visible) {
+      this.gizmoAnchor.position.copy(obj.position)
+      this.gizmoAnchor.rotation.set(0, obj.rotationY, 0)
+      this.gizmoAnchor.scale.set(1, 1, 1)
+      this.gizmoAnchor.updateMatrixWorld()
+      this.gizmoBaseObjSize.copy(obj.size)
+      if (tc.object !== this.gizmoAnchor) tc.attach(this.gizmoAnchor)
+      return
+    }
+    const wall = this.sceneManager.getSelected()
+    if (wall && wall.visible) {
+      const mid = new THREE.Vector3().addVectors(wall.start, wall.end).multiplyScalar(0.5)
+      const dx = wall.end.x - wall.start.x
+      const dz = wall.end.z - wall.start.z
+      this.gizmoAnchor.position.copy(mid)
+      this.gizmoAnchor.rotation.set(0, -Math.atan2(dz, dx), 0)
+      this.gizmoAnchor.scale.set(1, 1, 1)
+      this.gizmoAnchor.updateMatrixWorld()
+      if (tc.object !== this.gizmoAnchor) tc.attach(this.gizmoAnchor)
+      return
+    }
+    tc.detach()
+  }
+
+  setTransformGizmoMode(mode: TransformGizmoMode): void {
+    if (!this.transformControls) return
+    this.transformControls.setMode(mode)
+    if (mode === 'rotate') {
+      this.transformControls.showX = false
+      this.transformControls.showY = true
+      this.transformControls.showZ = false
+    } else {
+      this.transformControls.showX = true
+      this.transformControls.showY = true
+      this.transformControls.showZ = true
+    }
+    this.syncTransformGizmoAnchor()
+  }
+
+  getTransformGizmoMode(): TransformGizmoMode {
+    return this.transformControls?.getMode() ?? 'translate'
+  }
+
+  setTransformGizmoEnabled(enabled: boolean): void {
+    this.gizmoEnabled = enabled
+    this.syncTransformGizmoAnchor()
+  }
+
+  isTransformGizmoDragging(): boolean {
+    return Boolean(this.transformControls?.dragging)
+  }
+
+  isPointerOverTransformGizmo(): boolean {
+    return Boolean(this.transformControls && this.transformControls.object && this.transformControls.axis !== null)
+  }
+
+  onTransformGizmoChange(fn: () => void): () => void {
+    this.gizmoLiveChangeListeners.push(fn)
+    return () => {
+      const idx = this.gizmoLiveChangeListeners.indexOf(fn)
+      if (idx >= 0) this.gizmoLiveChangeListeners.splice(idx, 1)
+    }
   }
 
   /**
@@ -296,7 +577,8 @@ export class ViewportRenderer {
   }
 
   setGridVisible(visible: boolean): void {
-    this.grid.visible = visible
+    this.userGridVisible = visible
+    this.applySceneTheme()
   }
 
   private onWallAdded(wall: Wall): void {
@@ -344,6 +626,7 @@ export class ViewportRenderer {
 
     this.scene.remove(mesh)
     this.objectMeshes.delete(object.id)
+    disposeObjectChildren(mesh)
     mesh.geometry.dispose()
     disposeMaterial(mesh.material)
   }
@@ -366,12 +649,12 @@ export class ViewportRenderer {
     for (const [id, mesh] of this.objectMeshes) {
       const object = this.sceneManager.getObject(id)
       if (!object) continue
-      if (mesh.userData.isOpeningMesh) {
+      if (mesh.userData.isOpeningMesh || mesh.userData.isTerrainMesh) {
         for (const m of materialArray(mesh.material)) {
           const std = m as THREE.MeshStandardMaterial
           if (std.emissive) {
             std.emissive.setHex(object.isSelected ? 0x1d4ed8 : 0x000000)
-            std.emissiveIntensity = object.isSelected ? 0.35 : 0
+            std.emissiveIntensity = object.isSelected ? (mesh.userData.isTerrainMesh ? 0.24 : 0.35) : 0
           }
         }
         continue
@@ -379,6 +662,40 @@ export class ViewportRenderer {
       const base = object.isSelected ? SELECTED_COLOR : materialTint(object.materialId, object.color)
       tintMaterial(mesh.material, base)
     }
+    this.syncWallEndpointGrips()
+  }
+
+  /** Muestra nodos interactivos en `start` y `end` cuando hay un único muro seleccionado. */
+  private syncWallEndpointGrips(): void {
+    const selectedWall = this.sceneManager.getSelected()
+    if (!selectedWall) {
+      if (this.wallEndpointStartGrip) this.wallEndpointStartGrip.visible = false
+      if (this.wallEndpointEndGrip) this.wallEndpointEndGrip.visible = false
+      return
+    }
+    const elev = this.sceneManager.getLevel(selectedWall.levelId)?.elevation ?? 0
+    const startGrip = (this.wallEndpointStartGrip ??= this.createEndpointGripMesh())
+    const endGrip = (this.wallEndpointEndGrip ??= this.createEndpointGripMesh())
+    startGrip.position.set(selectedWall.start.x, elev + 0.12, selectedWall.start.z)
+    endGrip.position.set(selectedWall.end.x, elev + 0.12, selectedWall.end.z)
+    startGrip.visible = true
+    endGrip.visible = true
+  }
+
+  private createEndpointGripMesh(): THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 16, 12),
+      new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.95
+      })
+    )
+    mesh.renderOrder = 1002
+    mesh.visible = false
+    this.scene.add(mesh)
+    return mesh
   }
 
   /* ---------- Picking (selección con el cursor) ---------- */
@@ -397,6 +714,28 @@ export class ViewportRenderer {
     const hit = this.raycaster.intersectObjects([...this.objectMeshes.values()], false)[0]
     const id = hit?.object?.userData?.objectId as string | undefined
     return id ? (this.sceneManager.getObject(id) ?? null) : null
+  }
+
+  /**
+   * Impacto exacto sobre cualquier malla de terreno topográfico (`topo.terrain`).
+   * Lo usan las herramientas de Sonda de Niveles/Cotas y Plataforma/Explanación.
+   */
+  pickTerrain(clientX: number, clientY: number): { object: SceneObject; point: THREE.Vector3 } | null {
+    if (!this.setupPointerRay(clientX, clientY)) return null
+    const terrainMeshes: THREE.Mesh[] = []
+    for (const [id, mesh] of this.objectMeshes) {
+      if (!mesh.visible) continue
+      const obj = this.sceneManager.getObject(id)
+      if (obj && (obj.shapeId === 'topo.terrain' || obj.terrainData)) {
+        terrainMeshes.push(mesh)
+      }
+    }
+    if (terrainMeshes.length === 0) return null
+    const hit = this.raycaster.intersectObjects(terrainMeshes, false)[0]
+    if (!hit) return null
+    const id = hit.object.userData?.objectId as string | undefined
+    const obj = id ? this.sceneManager.getObject(id) : undefined
+    return obj ? { object: obj, point: hit.point.clone() } : null
   }
 
   /**
@@ -489,6 +828,191 @@ export class ViewportRenderer {
   clearToolPreview(): void {
     this.setToolPreview(null, null)
     if (this.previewPolygon) this.previewPolygon.visible = false
+    if (this.previewTemplateGroup) this.previewTemplateGroup.visible = false
+    if (this.previewSnapRing) this.previewSnapRing.visible = false
+  }
+
+  /**
+   * Previsualización fantasma (ghost wireframe en doble línea de espesor 0.20 m +
+   * volumen 3D semitransparente) para las plantillas de muros 2D interactivas.
+   */
+  setWallTemplatePreview(
+    segments: ReadonlyArray<{ start: THREE.Vector3; end: THREE.Vector3 }> | null,
+    opts?: {
+      thickness?: number
+      height?: number
+      snapPoint?: THREE.Vector3 | null
+      snapKind?: 'wall-vertex' | 'wall-edge' | 'grid' | 'none'
+    }
+  ): void {
+    if (!segments || segments.length === 0) {
+      if (this.previewTemplateGroup) this.previewTemplateGroup.visible = false
+      if (this.previewSnapRing) this.previewSnapRing.visible = false
+      return
+    }
+
+    const group = (this.previewTemplateGroup ??= (() => {
+      const g = new THREE.Group()
+      g.renderOrder = 997
+      this.scene.add(g)
+      return g
+    })())
+
+    const thickness = opts?.thickness ?? 0.2
+    const halfT = thickness * 0.5
+    const wallHeight = opts?.height ?? 2.5
+    const isWallSnap = opts?.snapKind === 'wall-vertex' || opts?.snapKind === 'wall-edge'
+    const strokeColor = isWallSnap ? 0x10b981 : 0x38bdf8
+
+    // Construimos contornos 2D con espesor real + aristas superiores 3D (ghost wireframe)
+    const lineVerts: number[] = []
+    const fillVerts: number[] = []
+
+    const pushLine = (
+      ax: number,
+      ay: number,
+      az: number,
+      bx: number,
+      by: number,
+      bz: number
+    ): void => {
+      lineVerts.push(ax, ay, az, bx, by, bz)
+    }
+
+    const pushQuad = (
+      ax: number,
+      ay: number,
+      az: number,
+      bx: number,
+      by: number,
+      bz: number,
+      cx: number,
+      cy: number,
+      cz: number,
+      dx: number,
+      dy: number,
+      dz: number
+    ): void => {
+      fillVerts.push(ax, ay, az, bx, by, bz, cx, cy, cz)
+      fillVerts.push(ax, ay, az, cx, cy, cz, dx, dy, dz)
+    }
+
+    for (const seg of segments) {
+      const sx = seg.start.x
+      const sz = seg.start.z
+      const ex = seg.end.x
+      const ez = seg.end.z
+      const dx = ex - sx
+      const dz = ez - sz
+      const len = Math.hypot(dx, dz)
+      if (len < 1e-4) continue
+
+      const nx = (-dz / len) * halfT
+      const nz = (dx / len) * halfT
+      const yBase = seg.start.y + 0.04
+      const yTop = seg.start.y + wallHeight
+
+      const p1x = sx + nx
+      const p1z = sz + nz
+      const p2x = ex + nx
+      const p2z = ez + nz
+      const p3x = ex - nx
+      const p3z = ez - nz
+      const p4x = sx - nx
+      const p4z = sz - nz
+
+      // Contorno de planta (doble línea de espesor arquitectónico + tapas)
+      pushLine(p1x, yBase, p1z, p2x, yBase, p2z)
+      pushLine(p4x, yBase, p4z, p3x, yBase, p3z)
+      pushLine(p1x, yBase, p1z, p4x, yBase, p4z)
+      pushLine(p2x, yBase, p2z, p3x, yBase, p3z)
+      // Eje central sutil
+      pushLine(sx, yBase + 0.01, sz, ex, yBase + 0.01, ez)
+
+      // Relleno traslúcido en planta
+      pushQuad(p1x, yBase, p1z, p2x, yBase, p2z, p3x, yBase, p3z, p4x, yBase, p4z)
+
+      // Si estamos en 3D, proyectar también el alzado fantasma del muro (2.5m)
+      if (this.viewMode === '3d') {
+        pushLine(p1x, yTop, p1z, p2x, yTop, p2z)
+        pushLine(p4x, yTop, p4z, p3x, yTop, p3z)
+        pushLine(p1x, yTop, p1z, p4x, yTop, p4z)
+        pushLine(p2x, yTop, p2z, p3x, yTop, p3z)
+        pushLine(sx, yBase, sz, sx, yTop, sz)
+        pushLine(ex, yBase, ez, ex, yTop, ez)
+        pushQuad(sx, yBase, sz, ex, yBase, ez, ex, yTop, ez, sx, yTop, sz)
+      }
+    }
+
+    const linesObj = (this.previewTemplateLines ??= (() => {
+      const geom = new THREE.BufferGeometry()
+      const mat = new THREE.LineBasicMaterial({
+        color: strokeColor,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.95
+      })
+      const ls = new THREE.LineSegments(geom, mat)
+      ls.frustumCulled = false
+      ls.renderOrder = 999
+      group.add(ls)
+      return ls
+    })())
+
+    linesObj.material.color.setHex(strokeColor)
+    linesObj.geometry.dispose()
+    const lineGeo = new THREE.BufferGeometry()
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3))
+    linesObj.geometry = lineGeo
+
+    const fillObj = (this.previewTemplateFill ??= (() => {
+      const geom = new THREE.BufferGeometry()
+      const mat = new THREE.MeshBasicMaterial({
+        color: strokeColor,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.18,
+        side: THREE.DoubleSide
+      })
+      const mesh = new THREE.Mesh(geom, mat)
+      mesh.frustumCulled = false
+      mesh.renderOrder = 997
+      group.add(mesh)
+      return mesh
+    })())
+
+    fillObj.material.color.setHex(strokeColor)
+    fillObj.geometry.dispose()
+    const fillGeo = new THREE.BufferGeometry()
+    fillGeo.setAttribute('position', new THREE.Float32BufferAttribute(fillVerts, 3))
+    fillObj.geometry = fillGeo
+
+    group.visible = true
+
+    // Anillo magnético sobre el punto de snap (verde esmeralda si engancha a muro existente)
+    if (opts?.snapPoint) {
+      const ring = (this.previewSnapRing ??= (() => {
+        const r = new THREE.Mesh(
+          new THREE.RingGeometry(0.14, 0.24, 24),
+          new THREE.MeshBasicMaterial({
+            color: strokeColor,
+            side: THREE.DoubleSide,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.95
+          })
+        )
+        r.rotation.x = -Math.PI / 2
+        r.renderOrder = 1001
+        this.scene.add(r)
+        return r
+      })())
+      ring.material.color.setHex(strokeColor)
+      ring.position.set(opts.snapPoint.x, opts.snapPoint.y + 0.06, opts.snapPoint.z)
+      ring.visible = true
+    } else if (this.previewSnapRing) {
+      this.previewSnapRing.visible = false
+    }
   }
 
   /**
@@ -773,14 +1297,16 @@ export class ViewportRenderer {
     const prevBackground = this.scene.background
     const prevClearColor = this.renderer.getClearColor(new THREE.Color())
     const prevClearAlpha = this.renderer.getClearAlpha()
-    const prevGridVisible = this.grid.visible
+    const prevGridVisible = this.gridSystem.group.visible
+    const prevGizmoVisible = this.transformControls?.visible
     const prevPreviewLine = this.previewLine?.visible
     const prevPreviewMarker = this.previewMarker?.visible
     const prevPreviewPolygon = this.previewPolygon?.visible
 
     try {
-      if (hideGrid) this.grid.visible = false
+      if (hideGrid) this.gridSystem.group.visible = false
       if (hideGizmos) {
+        if (this.transformControls) this.transformControls.visible = false
         if (this.previewLine) this.previewLine.visible = false
         if (this.previewMarker) this.previewMarker.visible = false
         if (this.previewPolygon) this.previewPolygon.visible = false
@@ -800,7 +1326,8 @@ export class ViewportRenderer {
       const comma = dataUrl.indexOf(',')
       return comma >= 0 ? dataUrl.slice(comma + 1) : ''
     } finally {
-      this.grid.visible = prevGridVisible
+      this.gridSystem.group.visible = prevGridVisible
+      if (this.transformControls && prevGizmoVisible !== undefined) this.transformControls.visible = prevGizmoVisible
       if (this.previewLine && prevPreviewLine !== undefined) this.previewLine.visible = prevPreviewLine
       if (this.previewMarker && prevPreviewMarker !== undefined) this.previewMarker.visible = prevPreviewMarker
       if (this.previewPolygon && prevPreviewPolygon !== undefined) this.previewPolygon.visible = prevPreviewPolygon
@@ -808,6 +1335,15 @@ export class ViewportRenderer {
       this.renderer.setClearColor(prevClearColor, prevClearAlpha)
       this.renderer.setPixelRatio(prevPixelRatio)
       this.renderer.setSize(originalWidth, originalHeight, false)
+    }
+  }
+
+  /** Registra un callback que se ejecuta antes de cada fotograma (animaciones MEP, efectos, etc.). */
+  onBeforeRender(fn: (deltaTime: number) => void): () => void {
+    this.beforeRenderListeners.push(fn)
+    return () => {
+      const idx = this.beforeRenderListeners.indexOf(fn)
+      if (idx >= 0) this.beforeRenderListeners.splice(idx, 1)
     }
   }
 
@@ -830,6 +1366,18 @@ export class ViewportRenderer {
       return
     }
 
+    const now = performance.now()
+    const dt = Math.min(0.1, (now - this.lastFrameTime) / 1000)
+    this.lastFrameTime = now
+
+    for (const fn of this.beforeRenderListeners) {
+      try {
+        fn(dt)
+      } catch (err) {
+        console.error('[ViewportRenderer] Error en onBeforeRender:', err)
+      }
+    }
+
     this.rafId = requestAnimationFrame(this.animate)
     this.renderer.render(this.scene, this.activeCamera)
   }
@@ -843,6 +1391,17 @@ export class ViewportRenderer {
       cancelAnimationFrame(this.rafId)
       this.rafId = null
     }
+    this.unsubscribeTheme?.()
+    this.unsubscribeTheme = null
+    if (this.transformControls) {
+      this.transformControls.detach()
+      this.scene.remove(this.transformControls)
+      this.transformControls.dispose()
+      this.transformControls = null
+    }
+    this.gridSystem.dispose()
+    this.scene.remove(this.gridSystem.group)
+
     this.envTexture?.dispose()
     this.envTexture = null
     this.scene.environment = null
@@ -861,6 +1420,7 @@ export class ViewportRenderer {
     this.wallMeshes.clear()
     for (const mesh of this.objectMeshes.values()) {
       this.scene.remove(mesh)
+      disposeObjectChildren(mesh)
       mesh.geometry.dispose()
       disposeMaterial(mesh.material)
     }
@@ -878,6 +1438,44 @@ export class ViewportRenderer {
       this.previewMarker.geometry.dispose()
       this.previewMarker.material.dispose()
       this.previewMarker = null
+    }
+    if (this.previewPolygon) {
+      this.scene.remove(this.previewPolygon)
+      this.previewPolygon.geometry.dispose()
+      this.previewPolygon.material.dispose()
+      this.previewPolygon = null
+    }
+    if (this.previewTemplateLines) {
+      this.previewTemplateLines.geometry.dispose()
+      this.previewTemplateLines.material.dispose()
+      this.previewTemplateLines = null
+    }
+    if (this.previewTemplateFill) {
+      this.previewTemplateFill.geometry.dispose()
+      this.previewTemplateFill.material.dispose()
+      this.previewTemplateFill = null
+    }
+    if (this.previewTemplateGroup) {
+      this.scene.remove(this.previewTemplateGroup)
+      this.previewTemplateGroup = null
+    }
+    if (this.previewSnapRing) {
+      this.scene.remove(this.previewSnapRing)
+      this.previewSnapRing.geometry.dispose()
+      this.previewSnapRing.material.dispose()
+      this.previewSnapRing = null
+    }
+    if (this.wallEndpointStartGrip) {
+      this.scene.remove(this.wallEndpointStartGrip)
+      this.wallEndpointStartGrip.geometry.dispose()
+      this.wallEndpointStartGrip.material.dispose()
+      this.wallEndpointStartGrip = null
+    }
+    if (this.wallEndpointEndGrip) {
+      this.scene.remove(this.wallEndpointEndGrip)
+      this.wallEndpointEndGrip.geometry.dispose()
+      this.wallEndpointEndGrip.material.dispose()
+      this.wallEndpointEndGrip = null
     }
   }
 }

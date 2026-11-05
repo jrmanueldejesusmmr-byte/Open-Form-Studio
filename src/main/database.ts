@@ -214,6 +214,10 @@ export interface DbObject {
   openingAngle?: number
   /** Visibilidad individual (opcional). */
   visible?: boolean
+  /** Parámetros estructurales dinámicos (opcional). */
+  structuralParams?: unknown
+  /** Datos topográficos 3D (opcional). */
+  terrainData?: unknown
 }
 
 export interface DbScene {
@@ -822,7 +826,9 @@ export class DatabaseManager {
               openingVariant: object.openingVariant ?? null,
               openingId: object.openingId ?? null,
               openingAngle: object.openingAngle ?? 0,
-              visible: object.visible ?? true
+              visible: object.visible ?? true,
+              structuralParams: object.structuralParams ?? null,
+              terrainData: object.terrainData ?? null
             }),
             object.shapeId ?? null
           ]
@@ -913,6 +919,8 @@ export class DatabaseManager {
         let openingId: string | null = null
         let openingAngle = 0
         let visible = true
+        let structuralParams: unknown = null
+        let terrainData: unknown = null
         if (row.props) {
           try {
             const parsed = JSON.parse(row.props) as {
@@ -925,6 +933,8 @@ export class DatabaseManager {
               openingId?: string | null
               openingAngle?: number
               visible?: boolean
+              structuralParams?: unknown
+              terrainData?: unknown
             }
             materialId = parsed.materialId ?? null
             levelId = parsed.levelId ?? null
@@ -935,6 +945,8 @@ export class DatabaseManager {
             openingId = parsed.openingId ?? null
             openingAngle = parsed.openingAngle ?? 0
             visible = parsed.visible ?? true
+            structuralParams = parsed.structuralParams ?? null
+            terrainData = parsed.terrainData ?? null
           } catch {
             materialId = null
           }
@@ -957,7 +969,9 @@ export class DatabaseManager {
           openingVariant,
           openingId,
           openingAngle,
-          visible
+          visible,
+          structuralParams,
+          terrainData
         }
       }
     )

@@ -28,7 +28,7 @@ export const ACTIVITY_BAR_ITEMS: readonly ActivityBarItem[] = [
   { id: 'toolbox', title: 'Herramientas AEC', icon: 'ruler', shortcut: 'Ctrl+B' },
   { id: 'navigator', title: 'Navegador del Proyecto', icon: 'folderOpen', shortcut: 'Ctrl+Shift+N' },
   { id: 'layers', title: 'Capas y Propiedades', icon: 'layers', shortcut: 'Ctrl+Shift+L' },
-  { id: 'costs', title: 'Costos / Presupuesto', icon: 'calculator', shortcut: 'Ctrl+Shift+C' }
+  { id: 'costs', title: 'Tabla Maestra BIM, Cuantificación y Costos', icon: 'calculator', shortcut: 'Ctrl+Shift+C' }
 ]
 
 export function mountActivityBar(container: HTMLElement, options: ActivityBarOptions): ActivityBarHandle {

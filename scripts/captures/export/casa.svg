@@ -12,16 +12,14 @@
     <text x="-0.6" y="-5.55" font-size="0.3">Escala 1:1 (metros reales) · Unidades: metros</text>
   </g>
   <g id="PISOS" stroke="#9e9a8f" stroke-width="0.015" fill="#e8e4dc" stroke-linecap="square" stroke-dasharray="6 3">
-    <line x1="0" y1="0.06" x2="8" y2="0.06" />
-    <line x1="8" y1="0.06" x2="8" y2="-6" />
+    <line x1="0" y1="0.1" x2="8" y2="0.1" />
+    <line x1="8" y1="0.1" x2="8" y2="-6" />
     <line x1="8" y1="-6" x2="0" y2="-6" />
-    <line x1="0" y1="-6" x2="0" y2="0.06" />
+    <line x1="0" y1="-6" x2="0" y2="0.1" />
   </g>
   <g id="OBJETOS" stroke="#5a5a66" stroke-width="0.02" fill="#8f8f9c" stroke-linecap="square">
   </g>
   <g id="PUERTAS" stroke="#aa2222" stroke-width="0.025" fill="none" stroke-linecap="square" stroke-dasharray="4 2">
-    <polygon points="1.55,0.06 2.45,0.06 2.45,-0.06 1.55,-0.06" />
-    <line x1="1.55" y1="0" x2="2.45" y2="0" />
     <line x1="2.45" y1="0" x2="2.442" y2="-0.117" />
     <line x1="2.442" y1="-0.117" x2="2.419" y2="-0.233" />
     <line x1="2.419" y1="-0.233" x2="2.381" y2="-0.344" />
@@ -34,21 +32,22 @@
     <line x1="1.894" y1="-0.831" x2="1.783" y2="-0.869" />
     <line x1="1.783" y1="-0.869" x2="1.667" y2="-0.892" />
     <line x1="1.667" y1="-0.892" x2="1.55" y2="-0.9" />
+    <line x1="1.55" y1="0" x2="2.45" y2="0" />
   </g>
   <g id="VENTANAS" stroke="#2244aa" stroke-width="0.025" fill="none" stroke-linecap="square" stroke-dasharray="2 2">
-    <polygon points="4.4,0.06 5.6,0.06 5.6,-0.06 4.4,-0.06" />
-    <line x1="4.4" y1="0.06" x2="5.6" y2="0.06" />
-    <line x1="5.6" y1="0.06" x2="5.6" y2="-0.06" />
-    <line x1="5.6" y1="-0.06" x2="4.4" y2="-0.06" />
-    <line x1="4.4" y1="-0.06" x2="4.4" y2="0.06" />
+    <line x1="4.4" y1="0" x2="5.6" y2="0" />
   </g>
   <g id="MUROS" stroke="#111111" stroke-width="0.04" fill="url(#wall-hatch)" stroke-linecap="square">
     <polygon points="0,-0.1 8,-0.1 8,0.1 0,0.1" />
     <polygon points="7.9,0 7.9,-6 8.1,-6 8.1,0" />
     <polygon points="8,-5.9 0,-5.9 0,-6.1 8,-6.1" />
     <polygon points="0.1,-6 0.1,0 -0.1,0 -0.1,-6" />
-    <line x1="0" y1="-0.1" x2="8" y2="-0.1" />
-    <line x1="0" y1="0.1" x2="8" y2="0.1" />
+    <line x1="0" y1="-0.1" x2="1.55" y2="-0.1" />
+    <line x1="0" y1="0.1" x2="1.55" y2="0.1" />
+    <line x1="2.45" y1="-0.1" x2="4.4" y2="-0.1" />
+    <line x1="2.45" y1="0.1" x2="4.4" y2="0.1" />
+    <line x1="5.6" y1="-0.1" x2="8" y2="-0.1" />
+    <line x1="5.6" y1="0.1" x2="8" y2="0.1" />
     <line x1="7.9" y1="0" x2="7.9" y2="-6" />
     <line x1="8.1" y1="0" x2="8.1" y2="-6" />
     <line x1="8" y1="-5.9" x2="0" y2="-5.9" />
@@ -57,6 +56,10 @@
     <line x1="-0.1" y1="-6" x2="-0.1" y2="0" />
     <line x1="0" y1="-0.1" x2="0" y2="0.1" />
     <line x1="8" y1="-0.1" x2="8" y2="0.1" />
+    <line x1="1.55" y1="-0.1" x2="1.55" y2="0.1" />
+    <line x1="2.45" y1="-0.1" x2="2.45" y2="0.1" />
+    <line x1="4.4" y1="-0.1" x2="4.4" y2="0.1" />
+    <line x1="5.6" y1="-0.1" x2="5.6" y2="0.1" />
     <line x1="7.9" y1="0" x2="8.1" y2="0" />
     <line x1="7.9" y1="-6" x2="8.1" y2="-6" />
     <line x1="8" y1="-5.9" x2="8" y2="-6.1" />
@@ -66,11 +69,13 @@
   </g>
   <g id="COTAS" stroke="#2266aa" stroke-width="0.015" fill="none" stroke-linecap="square" stroke-dasharray="3 2">
     <text x="4" y="-0.45" font-size="0.096" fill="#2266aa">8.00 m</text>
+    <text x="2" y="-0.6" font-size="0.08" fill="#2266aa">0.90 m</text>
+    <text x="5" y="-0.6" font-size="0.08" fill="#2266aa">1.20 m</text>
     <text x="7.55" y="-3" font-size="0.096" fill="#2266aa">6.00 m</text>
     <text x="4" y="-5.55" font-size="0.096" fill="#2266aa">8.00 m</text>
     <text x="0.45" y="-3" font-size="0.096" fill="#2266aa">6.00 m</text>
     <text x="4" y="-6.5" font-size="0.12" fill="#2266aa">8.00 m</text>
-    <text x="-0.5" y="-2.97" font-size="0.12" fill="#2266aa">6.06 m</text>
+    <text x="-0.5" y="-2.95" font-size="0.12" fill="#2266aa">6.10 m</text>
   </g>
   <g id="TEXTO" stroke="#222222" stroke-width="0.01" fill="#222222" stroke-linecap="square">
     <text x="2" y="0" font-size="0.08" fill="#222222">Puerta</text>

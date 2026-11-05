@@ -16,6 +16,9 @@ import {
 import { parseIfc, planIfcImport, applyIfcImport, type IfcImportPlan } from '../import/ifcImport'
 import { extractPdfLines, planPdfImport, applyPdfImport, type PdfImportPlan } from '../import/pdfImport'
 import { parseSvg, planSvgImport, applySvgImport, type SvgImportPlan } from '../import/svgImport'
+import { parseTopographyFile, type ParsedTopography } from '../import/topographyImport'
+import { createTerrainDataFromPoints } from '../engine/TerrainBuilder'
+import { SceneObject } from '../models/SceneObject'
 import {
   parseProjectJson,
   applySerializedProjectToWorkspace,
@@ -32,7 +35,18 @@ export interface ImportAppBridge {
 }
 
 /** Identificadores de las tarjetas de formato del modal de importación. */
-export type ImportCardId = 'glb' | 'obj' | 'stl' | 'dxf' | 'svg' | 'ifc' | 'pdf' | 'json'
+export type ImportCardId =
+  | 'glb'
+  | 'obj'
+  | 'stl'
+  | 'dxf'
+  | 'svg'
+  | 'ifc'
+  | 'pdf'
+  | 'json'
+  | 'topo-dxf'
+  | 'topo-csv'
+  | 'topo-geojson'
 
 /** Compatibilidad con tipos previos. */
 export type ImportFormat = ImportCardId | 'model' | 'pdf-text'
@@ -48,6 +62,7 @@ export interface ImportedFileResult {
   parsedIfcPlan?: IfcImportPlan | null
   parsedPdfPlan?: PdfImportPlan | null
   parsedJsonProject?: SerializedProjectFile | null
+  parsedTopography?: ParsedTopography | null
   transformParams: {
     scale: number
     x: number
@@ -58,6 +73,32 @@ export interface ImportedFileResult {
     centerAtOrigin: boolean
     includeInCosts: boolean
   }
+}
+
+export function createImportedTerrainObject(
+  topo: ParsedTopography,
+  fileName: string,
+  params: ImportedFileResult['transformParams']
+): SceneObject {
+  const terrainData = createTerrainDataFromPoints(topo.points, {
+    scale: params.scale,
+    sourceFormat: topo.format
+  })
+  const cleanName = fileName.replace(/\.[^.]+$/, '').trim() || 'Mapa Topográfico'
+  const terrainObj = new SceneObject(`Terreno: ${cleanName}`, 'shape')
+  terrainObj.shapeId = 'topo.terrain'
+  terrainObj.materialId = null
+  terrainObj.color = 0x5c8f4d
+  terrainObj.layer = 'terrain'
+  terrainObj.terrainData = terrainData
+  const relief = Math.max(0.5, terrainData.maxElev - terrainData.minElev)
+  terrainObj.size.set(terrainData.width, Math.round(relief * 100) / 100, terrainData.depth)
+  const cx = params.centerAtOrigin ? 0 : ((topo.bounds.minX + topo.bounds.maxX) / 2) * params.scale
+  const cz = params.centerAtOrigin ? 0 : (-(topo.bounds.minY + topo.bounds.maxY) / 2) * params.scale
+  terrainObj.position.set(params.x + cx, params.y, params.z + cz)
+  terrainObj.rotationY = params.rotYRad
+  terrainObj.includeInCosts = params.includeInCosts
+  return terrainObj
 }
 
 export function hasImportedContent(result: ImportedFileResult | null | undefined): boolean {
@@ -83,6 +124,9 @@ export function hasImportedContent(result: ImportedFileResult | null | undefined
   ) {
     return true
   }
+  if (result.parsedTopography && result.parsedTopography.points.length > 0) {
+    return true
+  }
   return false
 }
 
@@ -100,7 +144,7 @@ export interface ImportDialogOptions {
 
 interface FormatCardDef {
   id: ImportCardId
-  category: '3d' | '2d' | 'bim' | 'ref'
+  category: '3d' | '2d' | 'topo' | 'bim' | 'ref'
   title: string
   extLabel: string
   description: string
@@ -162,6 +206,37 @@ const FORMAT_CARDS: readonly FormatCardDef[] = [
     extensions: ['svg'],
     accept: '.svg'
   },
+  // Topografía / GIS (Estilo AutoCAD Civil)
+  {
+    id: 'topo-dxf',
+    category: 'topo',
+    title: 'DXF Topográfico 3D',
+    extLabel: '.dxf (X,Y,Z)',
+    description: 'Polilíneas 3D, curvas de nivel y cotas Z a malla de terreno 3D',
+    icon: 'layers',
+    extensions: ['dxf'],
+    accept: '.dxf'
+  },
+  {
+    id: 'topo-csv',
+    category: 'topo',
+    title: 'Puntos CSV / TXT',
+    extLabel: '.csv · .txt',
+    description: 'Nube de puntos topográficos X,Y,Z (GPS / estación total) a terreno 3D',
+    icon: 'fileCode',
+    extensions: ['csv', 'txt', 'xyz', 'pts'],
+    accept: '.csv,.txt,.xyz,.pts'
+  },
+  {
+    id: 'topo-geojson',
+    category: 'topo',
+    title: 'Mapa GIS GeoJSON',
+    extLabel: '.geojson · .json',
+    description: 'Curvas de nivel y geometrías GIS con elevaciones Z a terreno 3D',
+    icon: 'globe',
+    extensions: ['geojson', 'json'],
+    accept: '.geojson,.json'
+  },
   // BIM / Estructura
   {
     id: 'ifc',
@@ -199,6 +274,7 @@ const FORMAT_CARDS: readonly FormatCardDef[] = [
 const CATEGORIES: ReadonlyArray<{ id: FormatCardDef['category']; label: string }> = [
   { id: '3d', label: 'Modelos 3D' },
   { id: '2d', label: 'Planos 2D' },
+  { id: 'topo', label: 'Topografía / GIS' },
   { id: 'bim', label: 'BIM' },
   { id: 'ref', label: 'Documentos' }
 ]
@@ -231,7 +307,7 @@ function extOf(fileName: string): string {
   return idx >= 0 ? fileName.slice(idx + 1).toLowerCase() : ''
 }
 
-function cardForExtension(ext: string): ImportCardId | null {
+function cardForExtension(ext: string, preferredCategory?: FormatCardDef['category']): ImportCardId | null {
   switch (ext) {
     case 'glb':
     case 'gltf':
@@ -242,7 +318,14 @@ function cardForExtension(ext: string): ImportCardId | null {
     case 'stl':
       return 'stl'
     case 'dxf':
-      return 'dxf'
+      return preferredCategory === 'topo' ? 'topo-dxf' : 'dxf'
+    case 'csv':
+    case 'txt':
+    case 'xyz':
+    case 'pts':
+      return 'topo-csv'
+    case 'geojson':
+      return 'topo-geojson'
     case 'svg':
       return 'svg'
     case 'ifc':
@@ -250,8 +333,9 @@ function cardForExtension(ext: string): ImportCardId | null {
     case 'pdf':
       return 'pdf'
     case 'arqproj':
-    case 'json':
       return 'json'
+    case 'json':
+      return preferredCategory === 'topo' ? 'topo-geojson' : 'json'
     default:
       return null
   }
@@ -261,7 +345,7 @@ export function mountImportDialog(
   overlay: HTMLElement,
   options?: ImportDialogOptions
 ): {
-  open: () => Promise<ImportedFileResult | null>
+  open: (initialCategory?: FormatCardDef['category']) => Promise<ImportedFileResult | null>
   close: (result?: ImportedFileResult | null) => void
   isOpen: () => boolean
 } {
@@ -298,6 +382,7 @@ export function mountImportDialog(
   let parsedIfcPlan: IfcImportPlan | null = null
   let parsedPdfPlan: PdfImportPlan | null = null
   let parsedJsonProject: SerializedProjectFile | null = null
+  let parsedTopography: ParsedTopography | null = null
 
   function resetLoadedState(): void {
     loadedFileName = ''
@@ -312,6 +397,7 @@ export function mountImportDialog(
     parsedIfcPlan = null
     parsedPdfPlan = null
     parsedJsonProject = null
+    parsedTopography = null
   }
 
   function hasValidSelectedFile(): boolean {
@@ -326,7 +412,8 @@ export function mountImportDialog(
               parsedIfcPlan.columns.length > 0)) ||
           (parsedPdfPlan && parsedPdfPlan.walls.length > 0) ||
           (parsedJsonProject &&
-            (parsedJsonProject.walls.length > 0 || parsedJsonProject.objects.length > 0)))
+            (parsedJsonProject.walls.length > 0 || parsedJsonProject.objects.length > 0)) ||
+          (parsedTopography && parsedTopography.points.length > 0))
     )
   }
 
@@ -363,7 +450,7 @@ export function mountImportDialog(
     }
   }
 
-  function open(): Promise<ImportedFileResult | null> {
+  function open(initialCategory?: FormatCardDef['category']): Promise<ImportedFileResult | null> {
     if (isDialogOpen) {
       return Promise.resolve(null)
     }
@@ -375,7 +462,13 @@ export function mountImportDialog(
       settlePromise = resolve
       try {
         resetLoadedState()
-        activeCategory = currentCardDef().category
+        if (initialCategory) {
+          activeCategory = initialCategory
+          const firstInCat = FORMAT_CARDS.find((c) => c.category === initialCategory)
+          if (firstInCat) activeCard = firstInCat.id
+        } else {
+          activeCategory = currentCardDef().category
+        }
         overlay.classList.remove('is-hidden')
         renderModal()
         wireModal(abortController.signal)
@@ -503,7 +596,7 @@ export function mountImportDialog(
                     hidden
                     style="display: none;"
                     data-file-input
-                    accept=".glb,.gltf,.obj,.mtl,.stl,.dxf,.svg,.ifc,.pdf,.arqproj,.json"
+                    accept=".glb,.gltf,.obj,.mtl,.stl,.dxf,.csv,.txt,.xyz,.pts,.geojson,.svg,.ifc,.pdf,.arqproj,.json"
                     multiple
                   />
                   <div class="w-9 h-9 rounded-full bg-slate-800/80 flex items-center justify-center text-sky-400 group-hover:scale-110 transition-transform mb-1 shrink-0">
@@ -790,17 +883,34 @@ export function mountImportDialog(
         const lCount = parsedJsonProject.levels.length
         setFeedback(
           'ok',
-          `Proyecto nativo de ArqStudio validado: «${parsedJsonProject.metadata.name}»`,
+          `Proyecto nativo de Open Form Studio validado: «${parsedJsonProject.metadata.name}»`,
           `Reconstruirá el lienzo con ${wCount} muros, ${oCount} objetos/muebles, ${lCount} ${lCount === 1 ? 'nivel' : 'niveles'}, configuración de capas y cámara (${parsedJsonProject.camera.viewMode.toUpperCase()}).`
         )
         statusText.textContent = `Listo para cargar proyecto (${wCount} muros, ${oCount} objetos)`
+        submitBtn.disabled = false
+      } else if (parsedTopography) {
+        const pts = parsedTopography.points.length
+        const w = (parsedTopography.bounds.width * params.scale).toFixed(1)
+        const d = (parsedTopography.bounds.depth * params.scale).toFixed(1)
+        const minZ = (parsedTopography.bounds.minZ * params.scale).toFixed(2)
+        const maxZ = (parsedTopography.bounds.maxZ * params.scale).toFixed(2)
+        const contoursNote =
+          parsedTopography.contourLinesCount > 0
+            ? ` · ${parsedTopography.contourLinesCount} curvas/polilíneas 3D`
+            : ''
+        setFeedback(
+          'ok',
+          `Mapa topográfico ${parsedTopography.format} listo: ${loadedFileName}`,
+          `${pts} puntos 3D (X,Y,Z)${contoursNote} · Área: ${w} × ${d} m · Cotas Z: [${minZ} m a ${maxZ} m]. Generará malla TerrainMesh 3D con curvas de nivel.`
+        )
+        statusText.textContent = `Listo para generar terreno 3D (${pts} puntos)`
         submitBtn.disabled = false
       }
     }
 
     async function processLoadedBuffer(fileName: string, buffer: ArrayBuffer): Promise<void> {
       const ext = extOf(fileName)
-      const detectedCard = cardForExtension(ext)
+      const detectedCard = cardForExtension(ext, activeCategory)
       if (!detectedCard) {
         dropzone.classList.remove('has-file')
         dropzone.classList.add('has-error')
@@ -808,7 +918,7 @@ export function mountImportDialog(
         setFeedback(
           'error',
           `Extensión no admitida (.${ext || 'desconocida'})`,
-          'Formatos soportados: .glb, .gltf, .obj (+ .mtl), .stl, .dxf, .svg, .ifc, .pdf, .arqproj y .json.'
+          'Formatos soportados: .glb, .gltf, .obj (+ .mtl), .stl, .dxf, .csv, .txt, .geojson, .svg, .ifc, .pdf, .arqproj y .json.'
         )
         statusText.textContent = 'Error: formato no compatible'
         return
@@ -864,19 +974,39 @@ export function mountImportDialog(
             throw new Error(`El archivo ${ext.toUpperCase()} no contiene ninguna malla 3D con geometría válida.`)
           }
           parsedModel = model
+        } else if (ext === 'csv' || ext === 'txt' || ext === 'xyz' || ext === 'pts' || ext === 'geojson') {
+          const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer))
+          parsedTopography = parseTopographyFile(text, fileName)
         } else if (ext === 'dxf') {
           const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer))
-          const parsed = parseDxf(text)
-          const plan = inferWalls(parsed)
-          if (plan.walls.length === 0) {
-            throw new Error(
-              plan.textCount > 0
-                ? `El archivo DXF solo contiene ${plan.textCount} entidades de texto y ninguna entidad geométrica (LINE, LWPOLYLINE, CIRCLE, ARC).`
-                : 'No se encontraron entidades geométricas (LINE, LWPOLYLINE, CIRCLE, ARC) válidas en el archivo DXF.'
-            )
+          if (activeCard === 'topo-dxf' || activeCategory === 'topo') {
+            parsedTopography = parseTopographyFile(text, fileName)
+          } else {
+            const parsed = parseDxf(text)
+            const plan = inferWalls(parsed)
+            if (plan.walls.length === 0) {
+              // Si el DXF contiene polilíneas 3D / puntos topográficos pero no muros 2D, auto-detectar topografía
+              try {
+                const topo = parseTopographyFile(text, fileName)
+                if (topo.points.length >= 3) {
+                  selectFormatCard('topo-dxf', false)
+                  parsedTopography = topo
+                }
+              } catch {
+                /* mantener error 2D original */
+              }
+              if (!parsedTopography) {
+                throw new Error(
+                  plan.textCount > 0
+                    ? `El archivo DXF solo contiene ${plan.textCount} entidades de texto y ninguna entidad geométrica (LINE, LWPOLYLINE, CIRCLE, ARC).`
+                    : 'No se encontraron entidades geométricas (LINE, LWPOLYLINE, CIRCLE, ARC) válidas en el archivo DXF.'
+                )
+              }
+            } else {
+              parsedDxfText = text
+              parsedDxfPlan = plan
+            }
           }
-          parsedDxfText = text
-          parsedDxfPlan = plan
         } else if (ext === 'svg') {
           const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer))
           const parsed = parseSvg(text)
@@ -918,7 +1048,25 @@ export function mountImportDialog(
           parsedPdfPlan = plan
         } else if (ext === 'arqproj' || ext === 'json') {
           const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer))
-          parsedJsonProject = parseProjectJson(text)
+          if (ext === 'json' && (activeCard === 'topo-geojson' || activeCategory === 'topo')) {
+            parsedTopography = parseTopographyFile(text, 'mapa.geojson')
+          } else {
+            try {
+              parsedJsonProject = parseProjectJson(text)
+            } catch (jsonErr) {
+              if (ext === 'json') {
+                try {
+                  const topo = parseTopographyFile(text, 'mapa.geojson')
+                  selectFormatCard('topo-geojson', false)
+                  parsedTopography = topo
+                } catch {
+                  throw jsonErr
+                }
+              } else {
+                throw jsonErr
+              }
+            }
+          }
         } else {
           throw new Error(`Extensión de archivo no soportada: .${ext}`)
         }
@@ -952,7 +1100,24 @@ export function mountImportDialog(
               { name: card.title, extensions: card.extensions },
               {
                 name: 'Todos los formatos admitidos',
-                extensions: ['glb', 'gltf', 'obj', 'mtl', 'stl', 'dxf', 'svg', 'ifc', 'pdf', 'arqproj', 'json']
+                extensions: [
+                  'glb',
+                  'gltf',
+                  'obj',
+                  'mtl',
+                  'stl',
+                  'dxf',
+                  'csv',
+                  'txt',
+                  'xyz',
+                  'pts',
+                  'geojson',
+                  'svg',
+                  'ifc',
+                  'pdf',
+                  'arqproj',
+                  'json'
+                ]
               }
             ]
           })
@@ -1013,11 +1178,29 @@ export function mountImportDialog(
         parsedIfcPlan,
         parsedPdfPlan,
         parsedJsonProject,
+        parsedTopography,
         transformParams: params
       }
 
       try {
         if (scene && history) {
+          if (parsedTopography) {
+            const terrainObj = createImportedTerrainObject(parsedTopography, loadedFileName, params)
+            history.transaction(`Importar Topografía ${parsedTopography.format}`, () => {
+              scene.addObject(terrainObj)
+              scene.selectObject(terrainObj)
+            })
+            const msg = `Terreno 3D generado (${parsedTopography.points.length} puntos · ${terrainObj.size.x.toFixed(1)}×${terrainObj.size.z.toFixed(1)} m · cotas Z [${terrainObj.terrainData!.minElev.toFixed(2)}m, ${terrainObj.terrainData!.maxElev.toFixed(2)}m]).`
+            statusBar?.setMessage(msg)
+            showToast({
+              title: 'Terreno topográfico 3D generado',
+              subtitle: msg
+            })
+            close(result)
+            onImportSuccess?.(cleanProjectName)
+            return
+          }
+
           if (parsedModel) {
             const cleanObjName = loadedFileName.replace(/\.(glb|gltf|obj|stl)$/i, '') || 'Modelo 3D'
             const modelOpts: ImportModelOptions = {

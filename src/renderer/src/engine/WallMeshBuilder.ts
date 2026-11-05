@@ -7,6 +7,7 @@ import { applyMeterUVs, createMeshMaterial, materialTint } from './MaterialSyste
 import { buildShapeGeometry } from './ShapeMeshBuilder'
 import { buildDoor, buildWindow, type DoorVariant, type WindowVariant } from './OpeningMeshBuilder'
 import { buildFittedRoofGeometry } from './RoofBuilder'
+import { buildTerrainContourLines, buildTerrainGeometry, createDemoTerrainData } from './TerrainBuilder'
 
 /** Color de resaltado del objeto/pared seleccionado (lo comparten motor y renderer). */
 export const SELECTED_COLOR = 0x3d8bff
@@ -231,6 +232,9 @@ export function buildObjectMesh(object: SceneObject): THREE.Mesh {
     const result = isDoor
       ? buildDoor(opening, wallThickness, {
           variant: openingSpec.variant as DoorVariant,
+          style: object.doorStyle,
+          swingHand: object.swingHand,
+          swingDirection: object.swingDirection,
           openingAngle: object.openingAngle,
           frameMaterialId: object.frameMaterialId ?? null,
           leafMaterialId: object.leafMaterialId ?? object.materialId,
@@ -238,6 +242,9 @@ export function buildObjectMesh(object: SceneObject): THREE.Mesh {
         })
       : buildWindow(opening, wallThickness, {
           variant: openingSpec.variant as WindowVariant,
+          style: object.windowStyle,
+          swingHand: object.swingHand,
+          swingDirection: object.swingDirection,
           openingAngle: object.openingAngle,
           frameMaterialId: object.frameMaterialId ?? null,
           frameWidth: 0.06,
@@ -263,8 +270,40 @@ export function buildObjectMesh(object: SceneObject): THREE.Mesh {
     }
   }
 
+  // Terreno topográfico 3D (`TerrainMesh` con curvas de nivel visibles)
+  if (object.shapeId === 'topo.terrain' || object.terrainData) {
+    const tData = object.terrainData ?? createDemoTerrainData(object.size.x, object.size.z)
+    if (!object.terrainData) object.terrainData = tData
+    const terrainGeo = buildTerrainGeometry(tData, object.size)
+    const terrainMat =
+      createMeshMaterial(object.materialId) ??
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        color: 0xffffff,
+        roughness: 0.88,
+        metalness: 0.04,
+        side: THREE.DoubleSide
+      })
+    if (object.isSelected) {
+      terrainMat.emissive = new THREE.Color(SELECTED_COLOR)
+      terrainMat.emissiveIntensity = 0.24
+    }
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat)
+    terrainMesh.position.copy(object.position)
+    terrainMesh.rotation.y = object.rotationY
+    terrainMesh.castShadow = false
+    terrainMesh.receiveShadow = true
+    terrainMesh.userData.objectId = object.id
+    terrainMesh.userData.isTerrainMesh = true
+
+    const contourGroup = buildTerrainContourLines(tData, object.size)
+    terrainMesh.add(contourGroup)
+    return terrainMesh
+  }
+
   const fitted = fittedRoofGeometry(object)
-  const parametric = fitted ?? (object.shapeId ? buildShapeGeometry(object.shapeId, object.size) : null)
+  const parametric =
+    fitted ?? (object.shapeId ? buildShapeGeometry(object.shapeId, object.size, object.structuralParams) : null)
   let geometry: THREE.BufferGeometry
 
   if (object.importedGeometry) {

@@ -1,0 +1,185 @@
+/* Estilos para la Vista Cuádruple BIM (2x2 Multi-View Synchronized) */
+.quad-view-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  background: #090d16;
+  z-index: 45;
+  pointer-events: auto;
+}
+
+.quad-view-overlay.is-hidden {
+  display: none !important;
+}
+
+.quad-cell {
+  position: relative;
+  background: #111827;
+  border: 1px solid #1f2937;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.quad-cell.is-maximized {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 / -1 !important;
+  z-index: 50;
+}
+
+/* Header del cuadrante */
+.quad-header {
+  height: 30px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  z-index: 10;
+}
+
+.quad-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quad-badge {
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.quad-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quad-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.quad-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Área de contenido gráfico del cuadrante */
+.quad-viewport-area {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quad-svg-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Cotas dinámicas y textos */
+.cota-line {
+  stroke: #38bdf8;
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+
+.cota-tick {
+  stroke: #38bdf8;
+  stroke-width: 1.5;
+}
+
+.cota-text {
+  fill: #38bdf8;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.cota-nbt-line {
+  stroke: #f59e0b;
+  stroke-width: 1.2;
+  stroke-dasharray: 4, 3;
+}
+
+.cota-nbt-text {
+  fill: #f59e0b;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wall-2d-rect {
+  fill: #334155;
+  stroke: #94a3b8;
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: fill 0.15s;
+}
+
+.wall-2d-rect:hover {
+  fill: #475569;
+  stroke: #6366f1;
+}
+
+.wall-2d-rect.is-selected {
+  fill: rgba(99, 102, 241, 0.5);
+  stroke: #818cf8;
+}
+
+/* Botón de la barra de herramientas para activar Vista Cuádruple */
+.quad-view-hud-btn {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+}
+
+.quad-view-hud-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
+}
+
+.quad-view-hud-btn.is-active {
+  background: #6366f1;
+  color: #fff;
+  border-color: #4f46e5;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
+}
+

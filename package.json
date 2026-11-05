@@ -1,14 +1,16 @@
 {
   "name": "arqstudio3d",
   "version": "0.1.0",
-  "description": "Editor visual de arquitectura/diseño 3D asistido por IA — versión Electron/Three.js",
-  "author": "ArqStudio Team <info@arqstudio.com>",
+  "description": "Editor visual de arquitectura/diseño 3D asistido por IA — Open Form Studio",
+  "author": "Open Form Studio Team <info@openformstudio.com>",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
-    "test": "node scripts/_run-costs-tests.mjs",
+    "test": "node scripts/_run-costs-tests.mjs && node scripts/_run-bim-tests.mjs && node scripts/_run-openings-tests.mjs",
+    "test:bim": "node scripts/_run-bim-tests.mjs",
+    "test:openings": "node scripts/_run-openings-tests.mjs",
     "test:costs": "node scripts/_run-costs-tests.mjs",
     "capture:costs": "node scripts/_run-capture-costs.mjs",
     "start": "electron-vite preview --noSandbox",
@@ -20,8 +22,8 @@
     "dist": "npm run build && electron-builder"
   },
   "build": {
-    "appId": "com.arqstudio.app",
-    "productName": "ArqStudio 3D",
+    "appId": "com.openformstudio.app",
+    "productName": "Open Form Studio",
     "directories": {
       "output": "release"
     },

@@ -18,6 +18,7 @@ export type Shortcut = string
 /** Normaliza una tecla suelta al formato canónico (`−` tipográfico → `-`). */
 function normalizeKey(key: string): string {
   if (key === 'Escape') return 'Esc'
+  if (key === 'Delete') return 'Supr'
   if (key === ' ') return 'Space'
   // El catálogo escribe el menos con el signo tipográfico (U+2212).
   if (key === '\u2212') return '-'
@@ -40,8 +41,27 @@ export function shortcutFromEvent(event: KeyboardEvent): Shortcut {
  * Se normalizan a su forma canónica antes de buscar la acción.
  */
 const DEFAULT_ALIASES: Readonly<Record<Shortcut, Shortcut>> = {
-  // Ctrl+Shift+Z es el «Rehacer» estándar en editores y Cad: mismo destino.
-  'Ctrl+Shift+Z': 'Ctrl+Y'
+  // Ctrl+Shift+Z es el «Rehacer» estándar en editores y CAD: mismo destino.
+  'Ctrl+Shift+Z': 'Ctrl+Y',
+  // Muro simple: acepta tanto [W] (Wall) como [M] (Muro).
+  m: 'w',
+  // Seleccionar / Cancelar trazo: acepta tanto [S] como [Esc].
+  Esc: 's',
+  // Borrar selección: acepta [Supr] / [Delete] y [Backspace].
+  Backspace: 'Supr',
+  // Modal de atajos: acepta [?], [Shift+?], [¿], [Shift+¿] y [H].
+  'Shift+?': '?',
+  '¿': '?',
+  'Shift+¿': '?',
+  h: '?',
+  // Centrar y encuadrar toda la estructura (Fit to View): acepta [C], [Home] y [Ctrl+Shift+E].
+  Home: 'c',
+  'Ctrl+Shift+E': 'c',
+  // Acercar / alejar en teclados variados o RePág / AvPág.
+  'Shift++': '+',
+  '=': '+',
+  PageUp: '+',
+  PageDown: '-'
 }
 
 /**
@@ -78,6 +98,7 @@ export function formatShortcut(canonical: Shortcut): string {
   return canonical
     .split(' ')
     .map((stroke) => {
+      if (stroke === 'Space') return 'Espacio'
       if (stroke.length === 1) return stroke.toUpperCase()
       return stroke.replace(/\+([a-z])$/, (_, key: string) => `+${key.toUpperCase()}`)
     })

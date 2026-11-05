@@ -381,7 +381,7 @@ export function showAuthCallbackScreen(tokens: {
         ¡Inicio de sesión completado!
       </h2>
       <p id="arq-return-subtitle" style="margin: 0 0 28px 0; font-size: 14px; line-height: 1.5; color: #9ca3af;">
-        Tu cuenta se ha autenticado con éxito. Estamos transfiriendo tu sesión a la aplicación de escritorio de ArqStudio.
+        Tu cuenta se ha autenticado con éxito. Estamos transfiriendo tu sesión a la aplicación de escritorio de Open Form Studio.
       </p>
 
       <button id="arq-btn-return-app" style="
@@ -405,7 +405,7 @@ export function showAuthCallbackScreen(tokens: {
           <line x1="8" y1="21" x2="16" y2="21"></line>
           <line x1="12" y1="17" x2="12" y2="21"></line>
         </svg>
-        Volver a ArqStudio (Escritorio)
+        Volver a Open Form Studio (Escritorio)
       </button>
 
       <div style="margin-top: 16px;">
@@ -434,7 +434,7 @@ export function showAuthCallbackScreen(tokens: {
     returnBtn.addEventListener('click', () => {
       notifyRelay()
       if (statusText) {
-        statusText.innerText = 'Enfocando ArqStudio... Si la aplicación no aparece al frente, búscala en la barra de tareas.'
+        statusText.innerText = 'Enfocando Open Form Studio... Si la aplicación no aparece al frente, búscala en la barra de tareas.'
         statusText.style.color = '#10b981'
       }
       window.location.href = deepLinkUrl

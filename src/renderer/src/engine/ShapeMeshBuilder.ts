@@ -1,6 +1,15 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { applyMeterUVs } from './MaterialSystem'
+import {
+  defaultStructuralParamsFor,
+  isParametricStructuralShape,
+  STRUCTURAL_MATERIAL_COLOR,
+  type StructuralParams
+} from '../models/StructuralTypes'
+import { buildStructuralOrGeometricGeometry } from './StructuralSystemsBuilder'
+import { getCadBlock } from '../catalog/cadBlocksData'
+import { buildCadBlock3DGeometry } from '../catalog/cadBlocks3D'
 
 /**
  * Constructor de geometrías del catálogo (Fase 2 · punto C).
@@ -68,8 +77,19 @@ export function naturalSizeForShape(shapeId: string): THREE.Vector3 | null {
       return new THREE.Vector3(1.3, 0.8, 0.72)
     case 'furn.bed':
       return new THREE.Vector3(1.5, 0.85, 2.1)
-    default:
+    case 'topo.terrain':
+      return new THREE.Vector3(36, 5, 36)
+    default: {
+      const cadBlock = getCadBlock(shapeId)
+      if (cadBlock) {
+        return new THREE.Vector3(cadBlock.dimensions.width, cadBlock.dimensions.height, cadBlock.dimensions.depth)
+      }
+      if (isParametricStructuralShape(shapeId)) {
+        const s = defaultStructuralParamsFor(shapeId).size
+        return new THREE.Vector3(s.width, s.height, s.depth)
+      }
       return null
+    }
   }
 }
 
@@ -77,6 +97,11 @@ export function naturalSizeForShape(shapeId: string): THREE.Vector3 | null {
 export function defaultColorForShape(shapeId: string): number {
   if (shapeId.startsWith('furn.')) return 0xb08968
   if (shapeId.startsWith('roof.')) return 0x9a5b41
+  if (shapeId === 'topo.terrain') return 0x6b8f5e
+  if (isParametricStructuralShape(shapeId)) {
+    const def = defaultStructuralParamsFor(shapeId).params
+    return STRUCTURAL_MATERIAL_COLOR[def.materialType] ?? 0xc9ccd3
+  }
   return 0xc9ccd3
 }
 
@@ -619,7 +644,22 @@ function buildPlant(): THREE.BufferGeometry {
  * Las piezas de mobiliario usan su escala métrica natural; perfiles, cubiertas
  * y escalera son paramétricos a partir de `size`.
  */
-export function buildShapeGeometry(shapeId: string, size: THREE.Vector3): THREE.BufferGeometry | null {
+export function buildShapeGeometry(
+  shapeId: string,
+  size: THREE.Vector3,
+  structuralParams?: StructuralParams | null
+): THREE.BufferGeometry | null {
+  if (isParametricStructuralShape(shapeId)) {
+    return buildStructuralOrGeometricGeometry(shapeId, size, structuralParams)
+  }
+
+  const cadBlockGeo = buildCadBlock3DGeometry(shapeId, size)
+  if (cadBlockGeo) {
+    applyMeterUVs(cadBlockGeo)
+    return cadBlockGeo
+  }
+
+  let furnGeo: THREE.BufferGeometry | null = null
   switch (shapeId) {
     case 'shape.l':
     case 'shape.u':
@@ -652,22 +692,51 @@ export function buildShapeGeometry(shapeId: string, size: THREE.Vector3): THREE.
     case 'roof.sawtooth':
       return buildSawtooth(size)
     case 'furn.chair':
-      return buildChair()
+      furnGeo = buildChair()
+      break
     case 'furn.table':
-      return buildTable()
+      furnGeo = buildTable()
+      break
     case 'furn.desk':
-      return buildDesk()
+      furnGeo = buildDesk()
+      break
     case 'furn.bed':
-      return buildBed()
+      furnGeo = buildBed()
+      break
     case 'furn.sofa':
-      return buildSofa(1.9)
+      furnGeo = buildSofa(1.9)
+      break
     case 'furn.armchair':
-      return buildSofa(0.95)
+      furnGeo = buildSofa(0.95)
+      break
     case 'furn.lamp':
-      return buildLamp()
+      furnGeo = buildLamp()
+      break
     case 'furn.plant':
-      return buildPlant()
+      furnGeo = buildPlant()
+      break
     default:
       return null
   }
+
+  if (furnGeo) {
+    const nat = naturalSizeForShape(shapeId)
+    const isDefaultUnitBox =
+      Math.abs(size.x - 1) < 1e-3 && Math.abs(size.y - 1) < 1e-3 && Math.abs(size.z - 1) < 1e-3
+    if (
+      nat &&
+      !isDefaultUnitBox &&
+      (Math.abs(size.x - nat.x) > 1e-2 || Math.abs(size.y - nat.y) > 1e-2 || Math.abs(size.z - nat.z) > 1e-2)
+    ) {
+      furnGeo.scale(
+        Math.max(0.1, size.x / nat.x),
+        Math.max(0.1, size.y / nat.y),
+        Math.max(0.1, size.z / nat.z)
+      )
+      furnGeo.computeVertexNormals()
+      applyMeterUVs(furnGeo)
+    }
+    return furnGeo
+  }
+  return null
 }

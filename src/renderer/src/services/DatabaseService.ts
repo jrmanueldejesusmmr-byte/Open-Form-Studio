@@ -82,6 +82,10 @@ export interface SceneObject {
   openingAngle?: number
   /** Visibilidad individual del objeto. */
   visible?: boolean
+  /** Parámetros estructurales dinámicos (`struct.*` / `geo.*`). */
+  structuralParams?: unknown
+  /** Malla y cotas de terreno topográfico (`topo.terrain`). */
+  terrainData?: unknown
 }
 
 export interface SceneData {

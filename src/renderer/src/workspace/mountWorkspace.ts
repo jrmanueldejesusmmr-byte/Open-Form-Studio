@@ -20,10 +20,10 @@ import { mountAIChatPanel } from '../ui/AIChatPanel'
 import { BrainSession } from '../ai/brain/session'
 import { mountCanvasHud } from '../ui/CanvasHud'
 import { mountCommandPalette } from '../ui/CommandPalette'
+import { mountKeyboardCameraNavigator } from '../ui/KeyboardCameraNavigator'
 import { mountLayersPanel } from '../ui/LayersPanel'
 import { mountMenuBar } from '../ui/MenuBar'
 import { mountDebugPanel } from '../ui/DebugPanel'
-import { mountCostPanel } from '../costs/Panel'
 import type { DebugPanelHandle } from '../ui/DebugPanel'
 import { mountAIToolsDebug } from '../ai/AIToolsDebug'
 import type { AIToolsDebugHandle } from '../ai/AIToolsDebug'
@@ -47,16 +47,44 @@ import { mountStatusBar } from '../ui/StatusBar'
 import { mountTitleBar } from '../ui/TitleBar'
 import { mountToolboxPanel, CatalogItem } from '../ui/ToolboxPanel'
 import { mountMaterialPalette, MaterialPaletteHandle } from '../ui/MaterialPalette'
+import { openDoorPropertiesPanel } from '../ui/PropertiesPanel'
+import { resolveObjectOpeningSpec } from '../engine/WallMeshBuilder'
+import { toggleSwingHand, toggleSwingDirection } from '../engine/Opening2DSymbology'
 import { isMaterialId } from '../catalog/materials'
 import { buildTestHouseScene } from '../engine/TestSceneBuilder'
 import { promptAddElement } from '../ui/AddElementDialog'
 import { mountExportDialog } from '../ui/ExportDialog'
-import { mountImportDialog, type ImportedFileResult, type ImportAppBridge } from '../ui/ImportDialog'
+import {
+  mountImportDialog,
+  createImportedTerrainObject,
+  type ImportedFileResult,
+  type ImportAppBridge
+} from '../ui/ImportDialog'
 import { createImportedObjects, type ImportModelOptions } from '../import/modelImport'
 import { applyDxfImport } from '../export/dxfImport'
 import { applySvgImport } from '../import/svgImport'
 import { applyIfcImport } from '../import/ifcImport'
 import { applyPdfImport } from '../import/pdfImport'
+import { mountTopographyTool, type TopographyToolHandle } from '../engine/TopographyToolController'
+import { ElectricalModel } from '../mep/ElectricalModel'
+import { ElectricalRenderer3D } from '../mep/ElectricalRenderer3D'
+import { ElectricalToolController } from '../mep/ElectricalToolController'
+import { ElectricalDiagnosticModal } from '../mep/ElectricalDiagnosticModal'
+import type { ElectricalDeviceType, CircuitType } from '../mep/electricalTypes'
+import {
+  mountSelectionTransformPanel,
+  type SelectionTransformPanelHandle
+} from '../ui/SelectionTransformPanel'
+import { createDemoTerrainData } from '../engine/TerrainBuilder'
+import {
+  cloneStructuralParams,
+  defaultStructuralParamsFor,
+  isParametricStructuralShape,
+  STRUCTURAL_MATERIAL_COLOR,
+  STRUCTURAL_MATERIAL_TO_CATALOG,
+  type StructuralParams
+} from '../models/StructuralTypes'
+import { cloneTerrainData, type TerrainData } from '../models/TerrainTypes'
 import { openSaveAsDialog } from '../ui/SaveAsDialog'
 import { showToast } from '../ui/Toast'
 import {
@@ -77,8 +105,14 @@ import { mountViewportInteractions } from '../ui/ViewportInteractions'
 import { getCatalogEntry, loadPersistedCustomCatalog } from '../catalog/catalog'
 
 import { ActionRegistry, ACTION_CATALOG } from '../actions/ActionRegistry'
-import { CostPanel } from '../costs/Panel'
 import { KeybindingManager, formatShortcut, shortcutFromEvent } from '../actions/KeybindingManager'
+import {
+  getWallTemplateDef,
+  resolveWallTemplateId,
+  type WallTemplateId
+} from '../engine/WallTemplates'
+import { mountWallTemplateHud } from '../ui/WallTemplateHud'
+import { mountShortcutsModal } from '../ui/ShortcutsModal'
 import { LayoutManager } from '../layout/LayoutManager'
 import type { PanelId } from '../layout/types'
 import { icon } from '../ui/icons'
@@ -94,6 +128,14 @@ import {
   type CollaboratorRole,
   type SceneSyncPayload
 } from '../services/CollaborationService'
+
+import { BimMasterTable } from '../bim/BimMasterTable'
+import { mountBimMasterTableView, type BimMasterTableViewHandle } from '../bim/BimMasterTableView'
+import { QuadViewBimManager } from '../bim/QuadViewBimManager'
+import { mountWorkflowWizard, type WorkflowWizardHandle } from '../bim/WorkflowWizard'
+import '../bim/BimMasterTable.css'
+import '../bim/QuadViewBim.css'
+import '../bim/WorkflowWizard.css'
 
 import type { ProjectMode } from '../models/DashboardProject'
 
@@ -159,6 +201,8 @@ function persistedObjectToSnapshot(object: PersistedObject): SceneObjectSnapshot
     materialId: object.materialId ?? null,
     levelId: object.levelId ?? undefined,
     roofProps: object.roofProps as RoofProps | null,
+    structuralParams: cloneStructuralParams(object.structuralParams as StructuralParams | null | undefined),
+    terrainData: cloneTerrainData(object.terrainData as TerrainData | null | undefined),
     layer: object.layer,
     includeInCosts: object.includeInCosts ?? true,
     openingVariant: object.openingVariant ?? null,
@@ -259,16 +303,23 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   })
   const viewport = new ViewportRenderer(canvas, scene, cameraController)
 
-  /* ---------- Panel de Costos / Presupuesto ---------- */
+  /* ---------- Módulo MEP: Instalación Eléctrica ---------- */
+  const electricalModel = new ElectricalModel()
+  const electricalRenderer = new ElectricalRenderer3D(electricalModel, scene, viewport)
+  viewport.onBeforeRender((dt) => {
+    electricalRenderer.update(dt)
+  })
+  let electricalTool: ElectricalToolController | null = null
+  const electricalDiagnosticModal = new ElectricalDiagnosticModal(electricalModel, scene)
 
-  // El panel se auto-inicializa en su constructor (cálculo + etiquetas en vivo).
-  void mountCostPanel(document.getElementById('cost-panel')!, { scene, viewport })
+  /* ---------- Smart Reactive BIM (Single Source of Truth) ---------- */
+  const bimMasterTable = new BimMasterTable(scene, electricalModel)
 
   /* ---------- Barra superior y barra de estado ---------- */
 
-  mountTitleBar(document.getElementById('title-bar')!, { title: 'ArqStudio 3D', subtitle: 'Herramientas AEC' })
+  mountTitleBar(document.getElementById('title-bar')!, { title: 'Open Form Studio', subtitle: 'Herramientas AEC' })
 
-  const statusBar = mountStatusBar(document.getElementById('status-bar')!, 'ArqStudio 3D · AEC')
+  const statusBar = mountStatusBar(document.getElementById('status-bar')!, 'Open Form Studio · AEC')
 
   function startOrResumePlayback(): void {
     const timelineState = timelinePanel.getState()
@@ -310,6 +361,27 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   `
   viewportContainer?.appendChild(viewportRecBadge)
   const viewportRecTimer = viewportRecBadge.querySelector<HTMLElement>('[data-viewport-rec-timer]')
+
+  /* ---------- Módulos BIM: Vista Cuádruple, Tabla Maestra y Workflow Wizard ---------- */
+  let quadViewBimManager: QuadViewBimManager | null = null
+  let bimMasterTableView: BimMasterTableViewHandle | null = null
+  let workflowWizard: WorkflowWizardHandle | null = null
+
+  if (viewportContainer) {
+    quadViewBimManager = new QuadViewBimManager(viewportContainer, scene, viewport, bimMasterTable)
+    bimMasterTableView = mountBimMasterTableView(viewportContainer, { table: bimMasterTable, scene })
+  }
+
+  const topBars = document.getElementById('top-bars')
+  if (topBars) {
+    workflowWizard = mountWorkflowWizard(topBars, {
+      scene,
+      bimTable: bimMasterTable,
+      quadView: quadViewBimManager ?? undefined,
+      onSelectTool: (toolId) => applyAction(toolId),
+      onOpenBimTable: () => bimMasterTableView?.open()
+    })
+  }
 
   function toggleCanvasRecording(): void {
     if (!canvasRecorder) return
@@ -441,11 +513,132 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
   /* ---------- Panel izquierdo: rail + acordeones ---------- */
 
+  let topographyTool: TopographyToolHandle | null = null
+  let selectionTransformPanel: SelectionTransformPanelHandle | null = null
+
+  function createDemoTerrainInScene(): void {
+    const terrainData = createDemoTerrainData(36, 36)
+    const terrainObj = new SceneObject('Terreno Topográfico 3D', 'shape')
+    terrainObj.shapeId = 'topo.terrain'
+    terrainObj.materialId = null
+    terrainObj.color = 0x5c8f4d
+    terrainObj.layer = 'terrain'
+    terrainObj.terrainData = terrainData
+    const relief = Math.max(0.5, terrainData.maxElev - terrainData.minElev)
+    terrainObj.size.set(terrainData.width, Math.round(relief * 100) / 100, terrainData.depth)
+    terrainObj.position.set(0, 0, 0)
+    history.transaction('Generar terreno topográfico 3D', () => {
+      scene.addObject(terrainObj)
+      scene.selectObject(terrainObj)
+    })
+    setViewMode('3d')
+    frameScene()
+    statusBar.setMessage(
+      `Terreno 3D generado (${terrainData.width}×${terrainData.depth} m · cotas Z [${terrainData.minElev.toFixed(2)}m a ${terrainData.maxElev.toFixed(2)}m]). Usa «Sacar Niveles / Cotas» o «Aplanar Terreno».`
+    )
+    showToast({
+      title: 'Terreno Topográfico 3D listo',
+      subtitle: `Malla con curvas de nivel (${terrainData.width}×${terrainData.depth} m)`
+    })
+  }
+
   const toolbox = mountToolboxPanel(document.getElementById('toolbox-dock')!, {
-    onSelectWallTool: (type) => setWallTool(type),
-    onSelectCatalogItem: (item) => selectCatalogItem(item),
+    onSelectWallTool: (type) => {
+      topographyTool?.setMode('none')
+      setWallTool(type)
+    },
+    onSelectCatalogItem: (item) => {
+      topographyTool?.setMode('none')
+      selectCatalogItem(item)
+    },
     // Modificadores, zoom y «Añadir elemento» entran por el registro central.
-    onAction: (actionId) => handleAction(actionId)
+    onAction: (actionId) => handleAction(actionId),
+    onTopographyAction: (act) => {
+      if (act === 'import') {
+        openImportModal('topo')
+        return
+      }
+      if (act === 'demo') {
+        createDemoTerrainInScene()
+        return
+      }
+      if (act === 'clearSpots') {
+        topographyTool?.clearSpotElevations()
+        return
+      }
+      if (act === 'probe' || act === 'grade') {
+        if (scene.getTerrains().length === 0) {
+          createDemoTerrainInScene()
+        }
+        const current = topographyTool?.getMode() ?? 'none'
+        const next = current === act ? 'none' : act
+        if (next !== 'none') {
+          tool.setMode('select')
+          annotations?.setMode(null)
+        }
+        topographyTool?.setMode(next)
+      }
+    },
+    onTopographyTargetElevationChange: (elev) => {
+      topographyTool?.setTargetElevation(elev)
+    },
+    onTopographyShapeChange: (shape) => {
+      topographyTool?.setGradingShape(shape)
+    },
+    onStructuralMaterialChange: (mat) => {
+      const selObj = scene.getSelectedObject()
+      if (selObj && isParametricStructuralShape(selObj.shapeId)) {
+        const nextParams = {
+          ...(selObj.structuralParams ?? defaultStructuralParamsFor(selObj.shapeId!).params),
+          materialType: mat
+        }
+        history.transaction('Cambiar material estructural', () => {
+          scene.updateObject(selObj.id, {
+            structuralParams: nextParams,
+            materialId: STRUCTURAL_MATERIAL_TO_CATALOG[mat],
+            color: STRUCTURAL_MATERIAL_COLOR[mat]
+          })
+        })
+        statusBar.setMessage(
+          `Material estructural cambiado a ${mat === 'concrete' ? 'Hormigón' : mat === 'wood' ? 'Madera' : 'Acero'}.`
+        )
+      }
+    },
+    onSelectElectricalDevice: (type) => {
+      topographyTool?.setMode('none')
+      tool.setMode('select')
+      annotations?.setMode(null)
+      electricalTool?.setDevicePlacement(type)
+    },
+    onSelectElectricalCircuit: (circuit) => {
+      electricalTool?.setCircuit(circuit)
+    },
+    onToggleWiringTool: (active) => {
+      topographyTool?.setMode('none')
+      tool.setMode('select')
+      annotations?.setMode(null)
+      electricalTool?.setWiringMode(active ?? !electricalTool.isWiringActive())
+    },
+    onElectricalAction: (act) => {
+      if (act === 'xray') {
+        const isXRay = electricalRenderer.toggleXRay()
+        toolbox.setXRayActive(isXRay)
+        statusBar.setMessage(`Vista Rayos X ${isXRay ? 'ACTIVADA (muros semitransparentes)' : 'DESACTIVADA'}.`)
+      } else if (act === 'simulate') {
+        const isSim = electricalRenderer.toggleSimulation()
+        toolbox.setElectricalSimulating(isSim)
+        statusBar.setMessage(
+          isSim
+            ? '⚡ Simulación de energía ACTIVADA: haz clic en los interruptores para encender o apagar luces en tiempo real.'
+            : '⚡ Simulación de energía DESACTIVADA.'
+        )
+      } else if (act === 'diagnose') {
+        electricalDiagnosticModal.open()
+      } else if (act === 'clear') {
+        electricalModel.clear()
+        statusBar.setMessage('Instalación eléctrica vaciada.')
+      }
+    }
   })
 
   /* ---------- Paleta de materiales (Fase 1) ---------- */
@@ -485,7 +678,15 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       cameraController.setZoomFraction(fraction)
       viewport.syncCamera()
     },
-    onViewMode: (mode) => setViewMode(mode),
+    onViewMode: (mode) => {
+      if (mode === 'quad') {
+        quadViewBimManager?.toggle()
+        statusBar.setMessage('Vista Cuádruple BIM (Planta / Corte / Fachada / 3D) activada.')
+      } else {
+        quadViewBimManager?.close()
+        setViewMode(mode)
+      }
+    },
     onConvertToPlan: () => convertToPlan()
   })
 
@@ -495,10 +696,15 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
   /* ---------- Herramienta activa del lienzo (trazo, selección, colocación) ---------- */
 
+  const shortcutsModal = mountShortcutsModal(document.body)
+
+  let wallTemplateHud: ReturnType<typeof mountWallTemplateHud> | null = null
+
   const tool = mountCanvasTool({
     canvas,
     viewport,
     scene,
+    history,
     snapEnabled: () => snapEnabled,
     orthoEnabled: () => orthoEnabled,
     activeWallType: () => activeWallTool,
@@ -508,19 +714,36 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     // activa, o con Alt/Shift+Alt sobre clic izquierdo: CanvasTool se abstiene
     // de dibujar, colocar o mover en esos casos.
     cameraClaimsGesture: (e) => orbitToolActive || (e.altKey && (e.button === 0 || e.button === 2)),
-    // Mientras se traza un techo por área, se reproduce la animación o hay una herramienta
-    // de notas activa, CanvasTool se abstiene por completo.
+    // Mientras se traza un techo por área, se reproduce la animación, hay una herramienta
+    // de notas, topografía o instalación eléctrica activa, CanvasTool se abstiene por completo.
     externalToolActive: () =>
       (roofDraft?.isActive() ?? false) ||
       animationEngine.isEditingLocked() ||
-      (annotations?.isActive() ?? false),
+      (annotations?.isActive() ?? false) ||
+      (topographyTool?.isActive() ?? false) ||
+      (electricalTool?.isActive() ?? false),
     onModeChange: (mode) => {
       // Salir de la colocación desmarca el elemento en el catálogo.
       if (mode !== 'place') toolbox.setActiveCatalogItem(null)
+      if (mode !== 'template') toolbox.setActiveWallTemplate(null)
+      if (mode !== 'wall') toolbox.setActiveWallTool(null)
+      if (mode === 'select') toolbox.setActiveActionTool('tool.crosshair')
       describeToolMode(mode)
+    },
+    onTemplateStateChange: (state) => {
+      wallTemplateHud?.update(state)
     },
     onMessage: (message) => statusBar.setMessage(message)
   })
+
+  if (viewportContainer) {
+    wallTemplateHud = mountWallTemplateHud(viewportContainer, {
+      onSelectTemplate: (tplId) => activateWallTemplate(tplId),
+      onUpdateParams: (patch) => tool.updateWallTemplateParams(patch),
+      onRotate90: () => rotateSelectionOrPending90(),
+      onExit: () => applyAction('tool.crosshair')
+    })
+  }
 
   annotations = mountAnnotations({
     canvas,
@@ -535,6 +758,25 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     },
     projectName: () => currentProjectName,
     history
+  })
+
+  electricalTool = new ElectricalToolController({
+    canvas,
+    model: electricalModel,
+    renderer: electricalRenderer,
+    scene,
+    viewport,
+    onMessage: (msg) => statusBar.setMessage(msg),
+    onToolChange: (toolName) => {
+      if (toolName === 'wire') {
+        toolbox.setWiringToolActive(true, electricalTool?.getCircuit())
+      } else if (toolName && toolName.startsWith('place.')) {
+        toolbox.setActiveElectricalDevice(toolName.replace('place.', '') as ElectricalDeviceType)
+      } else {
+        toolbox.setWiringToolActive(false)
+        toolbox.setActiveElectricalDevice(null)
+      }
+    }
   })
 
   // Estado de la herramienta «Orbitar»: arrastre con clic izquierdo o Shift+Alt
@@ -603,24 +845,52 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   function describeToolMode(mode: ToolMode): void {
     if (mode === 'wall') {
       statusBar.setMessage(
-        `Trazo de «${TOOL_LABELS[activeWallTool]}»: clic/arrastre para el origen, suelta en el destino. Esc cancela.`
+        `Trazo de «${TOOL_LABELS[activeWallTool]}»: clic/arrastre para el origen, suelta en el destino · [S / Esc] cancelar.`
       )
+      return
+    }
+    if (mode === 'template') {
+      const tpl = tool.getWallTemplateState()
+      if (tpl) {
+        const def = getWallTemplateDef(tpl.templateId)
+        statusBar.setMessage(
+          `Plantilla 2D «${def.label}» (${tpl.width} × ${tpl.depth} m): clic para colocar o arrastra esquina a esquina · [G] rotar 90° · [S / Esc] salir.`
+        )
+      }
       return
     }
     if (mode === 'place') {
       const spec = tool.getPendingObject()
       statusBar.setMessage(
-        `Colocando «${spec?.name ?? 'elemento'}»: clic en el lienzo para situarlo. Esc para salir.`
+        `Colocando «${spec?.name ?? 'elemento'}»: clic en el lienzo para situarlo · [G] rotar 90° · [S / Esc] salir.`
       )
       return
     }
-    statusBar.setMessage('Selección: clic para elegir, arrastre para mover, Supr para eliminar.')
+    statusBar.setMessage(
+      'Selección [S]: clic elige un muro u objeto · arrastra extremos azules para estirar · [G] rotar 90° · [Supr] borrar.'
+    )
+  }
+
+  /** Activa una plantilla interactiva de muros 2D conectados (`rect`, `l`, `u`, `c`, `t`, `cross`, `ring`, `arc`). */
+  function activateWallTemplate(templateId: WallTemplateId): void {
+    orbitToolActive = false
+    roofDraft?.dispose()
+    roofDraft = null
+    annotations?.setMode(null)
+    topographyTool?.setMode('none')
+
+    const def = getWallTemplateDef(templateId)
+    tool.setWallTemplate(templateId)
+    toolbox.setActiveWallTemplate(templateId)
+    menuBar.setActiveTool(def.actionId)
+    statusBar.setTool(def.shortLabel)
   }
 
   /**
    * Selecciona un elemento del catálogo. Los modificadores actúan sobre la
-   * selección, los **materiales se aplican** al muro u objeto seleccionado
-   * (antes se «colocaban» como cubos grises) y el resto se coloca con su forma.
+   * selección, los **materiales se aplican** al muro u objeto seleccionado,
+   * las **formas predefinidas** se redirigen a plantillas de muros 2D conectados
+   * y el resto se coloca con su geometría 3D.
    */
   function selectCatalogItem(item: CatalogItem): void {
     if (item.kind === 'modifier') {
@@ -629,9 +899,37 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       return
     }
 
+    // Formas predefinidas (Perfil L, U, C, T, Cruz, Anillo, Arco) → generador de muros 2D reales
+    const mappedTemplate = resolveWallTemplateId(item.id)
+    if (mappedTemplate) {
+      activateWallTemplate(mappedTemplate)
+      return
+    }
+
     const entry = getCatalogEntry(item.id)
-    const shapeId = entry?.shapeId ?? null
-    const materialId = entry?.materialId ?? null
+    const shapeId = entry?.shapeId ?? (isParametricStructuralShape(item.id) ? item.id : null)
+    let materialId = entry?.materialId ?? null
+    let customColor: number | undefined
+    let structuralParams: PendingObjectSpec['structuralParams'] = null
+    let dimensions = entry?.dimensions ?? null
+
+    if (shapeId && isParametricStructuralShape(shapeId)) {
+      const defaults = defaultStructuralParamsFor(shapeId)
+      const chosenMat = toolbox.getStructuralMaterial()
+      // En sistemas tensados/neumáticos respetamos membrana por defecto salvo que sea entramada/adintelada/etc.
+      const effectiveMat =
+        shapeId === 'struct.tensada' || shapeId === 'struct.neumatica'
+          ? defaults.params.materialType
+          : chosenMat
+      structuralParams = {
+        ...defaults.params,
+        materialType: effectiveMat
+      }
+      materialId = STRUCTURAL_MATERIAL_TO_CATALOG[effectiveMat]
+      customColor = STRUCTURAL_MATERIAL_COLOR[effectiveMat]
+      if (!dimensions) dimensions = defaults.size
+    }
+
     const isOpening = Boolean(shapeId && shapeId.startsWith('opening.') && shapeId !== 'opening.slab')
 
     if (item.kind === 'material') {
@@ -641,13 +939,15 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
     toolbox.setActiveCatalogItem(item.id)
     tool.setPendingObject({
-      name: item.label,
+      name: entry?.label ?? item.label,
       kind: item.kind,
+      color: customColor,
       shapeId,
       materialId,
-      size: entry?.dimensions ?? null,
+      size: dimensions,
       importedGeometry: entry?.importedGeometry ?? null,
-      importedMaterial: entry?.importedMaterial ?? null
+      importedMaterial: entry?.importedMaterial ?? null,
+      structuralParams
     })
     const openingArt = isOpening
       ? ` (perforación real: haz clic sobre un muro)`
@@ -660,7 +960,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       modifier: 'Modificador'
     }
     statusBar.setMessage(
-      `${family[item.kind]} «${item.label}»: clic en el lienzo para colocarlo${openingArt} (Esc para salir).`
+      `${family[item.kind]} «${entry?.label ?? item.label}»: clic en el lienzo o terreno para colocarlo${openingArt} (Esc para salir).`
     )
   }
 
@@ -712,27 +1012,203 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     }
   }
 
-  /** Ctrl+C con selección (Fase 4): duplica muros/objetos con +0,5 m en X/Z. */
+  /**
+   * Rota 90° en sentido horario [G]:
+   *  - Si hay una plantilla 2D u objeto pendiente de colocar, lo gira 90° antes de soltarlo.
+   *  - Si hay muros u objetos seleccionados, rota todo el grupo conectado 90° alrededor de su centroide.
+   */
+  function rotateSelectionOrPending90(): void {
+    if (tool.rotatePending90()) return
+
+    const selectedWalls = scene.getWalls().filter((w) => w.isSelected)
+    const selectedObjects = scene.getObjects().filter((o) => o.isSelected)
+    if (selectedWalls.length === 0 && selectedObjects.length === 0) {
+      statusBar.setMessage('Rotar 90° [G]: activa una plantilla de muros 2D o selecciona primero un muro u objeto.')
+      return
+    }
+
+    let sumX = 0
+    let sumZ = 0
+    let count = 0
+    for (const w of selectedWalls) {
+      sumX += w.start.x + w.end.x
+      sumZ += w.start.z + w.end.z
+      count += 2
+    }
+    const standaloneObjects = selectedObjects.filter((o) => !o.openingId)
+    for (const o of standaloneObjects) {
+      sumX += o.position.x
+      sumZ += o.position.z
+      count += 1
+    }
+    if (count === 0 && selectedObjects.length > 0) {
+      for (const o of selectedObjects) {
+        sumX += o.position.x
+        sumZ += o.position.z
+        count += 1
+      }
+    }
+    const cx = sumX / Math.max(1, count)
+    const cz = sumZ / Math.max(1, count)
+
+    const rotPt = (px: number, pz: number): { x: number; z: number } => {
+      const dx = px - cx
+      const dz = pz - cz
+      return {
+        x: Math.round((cx - dz) * 1000) / 1000,
+        z: Math.round((cz + dx) * 1000) / 1000
+      }
+    }
+
+    const objectsByOpeningId = new Map<string, SceneObject>()
+    for (const obj of scene.getObjects()) {
+      if (obj.openingId) objectsByOpeningId.set(obj.openingId, obj)
+    }
+    const handledObjectIds = new Set<string>()
+
+    history.transaction('Rotar 90°', () => {
+      for (const w of selectedWalls) {
+        const ns = rotPt(w.start.x, w.start.z)
+        const ne = rotPt(w.end.x, w.end.z)
+        const nextStart = new THREE.Vector3(ns.x, w.start.y, ns.z)
+        const nextEnd = new THREE.Vector3(ne.x, w.end.y, ne.z)
+        scene.moveWall(w.id, nextStart, nextEnd, false)
+
+        // Realinear puertas/ventanas alojadas en este muro
+        const dx = nextEnd.x - nextStart.x
+        const dz = nextEnd.z - nextStart.z
+        const len = Math.hypot(dx, dz)
+        if (len > 1e-4 && w.openings.length > 0) {
+          const ux = dx / len
+          const uz = dz / len
+          const nextRotY = -Math.atan2(dz, dx)
+          for (const op of w.openings) {
+            const linkedObj = objectsByOpeningId.get(op.id)
+            if (linkedObj) {
+              handledObjectIds.add(linkedObj.id)
+              const nextPos = new THREE.Vector3(
+                nextStart.x + ux * op.x,
+                linkedObj.position.y,
+                nextStart.z + uz * op.x
+              )
+              scene.moveObject(linkedObj.id, nextPos, nextRotY, false)
+            }
+          }
+        }
+      }
+
+      for (const o of selectedObjects) {
+        if (handledObjectIds.has(o.id)) continue
+        const np = rotPt(o.position.x, o.position.z)
+        const nextPos = new THREE.Vector3(np.x, o.position.y, np.z)
+        scene.moveObject(o.id, nextPos, o.rotationY - Math.PI / 2, false)
+      }
+    })
+
+    const total = selectedWalls.length + selectedObjects.length
+    statusBar.setMessage(
+      `${total} elemento${total === 1 ? '' : 's'} rotado${total === 1 ? '' : 's'} 90° (Ctrl+Z para deshacer).`
+    )
+  }
+
+  /** Confirmación rápida para vaciar escena [X] compatible con Electron (#dialog-overlay). */
+  async function confirmAndClearScene(): Promise<void> {
+    const wallCount = scene.getWalls().length
+    const objCount = scene.getObjects().length
+    if (wallCount === 0 && objCount === 0) {
+      statusBar.setMessage('La escena ya está vacía.')
+      return
+    }
+
+    const overlay = document.getElementById('dialog-overlay')
+    let confirmed = false
+
+    if (overlay) {
+      confirmed = await new Promise<boolean>((resolve) => {
+        let settled = false
+        const done = (val: boolean): void => {
+          if (settled) return
+          settled = true
+          overlay.classList.add('is-hidden')
+          overlay.innerHTML = ''
+          document.removeEventListener('keydown', onKey, true)
+          resolve(val)
+        }
+        const onKey = (ev: KeyboardEvent): void => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault()
+            ev.stopPropagation()
+            done(false)
+          } else if (ev.key === 'Enter') {
+            ev.preventDefault()
+            ev.stopPropagation()
+            done(true)
+          }
+        }
+        document.addEventListener('keydown', onKey, true)
+        overlay.classList.remove('is-hidden')
+        overlay.innerHTML = `
+          <div class="dialog">
+            <div class="dialog__backdrop" data-clear-cancel></div>
+            <div class="dialog__card" role="dialog" aria-modal="true" aria-label="Vaciar escena">
+              <h2 class="dialog__title">¿Vaciar toda la escena?</h2>
+              <p class="dialog__message">Se eliminarán ${wallCount} muro${wallCount === 1 ? '' : 's'} y ${objCount} objeto${objCount === 1 ? '' : 's'} del plano actual. Podrás recuperarlo con <strong>Ctrl + Z</strong>.</p>
+              <div class="dialog__actions">
+                <button class="dialog__button" type="button" data-clear-cancel>Cancelar [Esc]</button>
+                <button class="dialog__button dialog__button--danger" type="button" data-clear-confirm>Vaciar escena [Enter]</button>
+              </div>
+            </div>
+          </div>
+        `
+        overlay.querySelectorAll<HTMLElement>('[data-clear-cancel]').forEach((el) =>
+          el.addEventListener('click', () => done(false))
+        )
+        const confirmBtn = overlay.querySelector<HTMLButtonElement>('[data-clear-confirm]')
+        confirmBtn?.addEventListener('click', () => done(true))
+        confirmBtn?.focus()
+      })
+    } else {
+      confirmed = true
+    }
+
+    if (!confirmed) {
+      statusBar.setMessage('Vaciar escena cancelado.')
+      return
+    }
+
+    history.transaction('Vaciar escena', () => {
+      scene.clear()
+      annotations?.clear()
+    })
+    statusBar.setMessage('Escena vaciada (Ctrl+Z para deshacer).')
+  }
+
+  /** Ctrl+D / Ctrl+C con selección: duplica muros y objetos con +0,5 m en X/Z y selecciona la copia. */
   function duplicateSelection(): void {
     const walls = scene.getWalls().filter((wall) => wall.isSelected)
     const objects = scene.getObjects().filter((object) => object.isSelected)
     const total = walls.length + objects.length
     if (total === 0) {
-      statusBar.setMessage('Copiar: selecciona primero un muro u objeto del lienzo.')
+      statusBar.setMessage('Duplicar [Ctrl+D]: selecciona primero un muro, habitación u objeto del lienzo.')
       return
     }
     const OFFSET = new THREE.Vector3(0.5, 0, 0.5)
+    const createdWalls: ReturnType<typeof scene.addWall>[] = []
+    const createdObjects: SceneObject[] = []
     history.transaction(`Duplicar ${total} elemento${total === 1 ? '' : 's'}`, () => {
       for (const wall of walls) {
-        scene.addWall(
+        const copyWall = scene.addWall(
           wall.type,
           wall.start.clone().add(OFFSET),
           wall.end.clone().add(OFFSET),
           wall.aiControlled,
           wall.levelId
         )
+        if (wall.materialId) scene.setWallMaterial(copyWall.id, wall.materialId)
+        createdWalls.push(copyWall)
       }
       for (const object of objects) {
+        if (object.openingId) continue
         const copy = scene.addObject(new SceneObject(object.name, object.kind))
         copy.position.copy(object.position).add(OFFSET)
         copy.rotationY = object.rotationY
@@ -740,12 +1216,23 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         copy.color = object.color
         copy.shapeId = object.shapeId
         copy.materialId = object.materialId
+        copy.structuralParams = cloneStructuralParams(object.structuralParams)
+        copy.terrainData = cloneTerrainData(object.terrainData)
         // La copia se queda en el mismo piso que el original (y a su cota).
         copy.levelId = object.levelId
-        copy.position.y = scene.getLevel(object.levelId)?.elevation ?? copy.position.y
+        if (!copy.terrainData) {
+          copy.position.y = scene.getLevel(object.levelId)?.elevation ?? copy.position.y
+        }
+        scene.updateObject(copy.id, {})
+        createdObjects.push(copy)
       }
     })
-    statusBar.setMessage(`${total} elemento${total === 1 ? '' : 's'} duplicado${total === 1 ? '' : 's'} (Ctrl+Z para deshacer).`)
+    if (createdWalls.length > 0 && createdObjects.length === 0) {
+      scene.selectWalls(createdWalls)
+    } else if (createdObjects.length === 1 && createdWalls.length === 0) {
+      scene.selectObject(createdObjects[0])
+    }
+    statusBar.setMessage(`${total} elemento${total === 1 ? '' : 's'} duplicado${total === 1 ? '' : 's'} [Ctrl+D] (Ctrl+Z para deshacer).`)
   }
 
   /**
@@ -919,8 +1406,13 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     renderRoofPropsPanel()
     if (obj) {
       timelinePanel.setState({ selectedObjectId: obj.id })
+      if (obj.openingId || resolveObjectOpeningSpec(obj)) {
+        openDoorPropertiesPanel(obj, scene)
+      }
     } else if (!scene.getSelected()) {
       timelinePanel.setState({ selectedObjectId: null })
+      const existingPanel = document.querySelector('.opening-cad-panel')
+      existingPanel?.remove()
     }
   })
 
@@ -1019,16 +1511,26 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
   /* ---------- Chat de IA ---------- */
 
+  const aiChatService = new AIChatService(scene, {
+    history,
+    electricalModel,
+    electricalDiagnosticModal,
+    electricalRenderer,
+    bimTable: bimMasterTable,
+    onFrameScene: () => frameScene()
+  })
+
   mountAIChatPanel(document.getElementById('chat-panel')!, {
+    service: aiChatService,
     session: aiBrain,
     welcome: PROJECT_NOTES,
     prompts: [
-      { label: 'Haz una habitación de 4 por 3 con paredes de ladrillo', command: 'haz una habitación de 4 por 3 con paredes de ladrillo' },
-      { label: 'Crea una casa de 10 por 8', command: 'crea una casa de 10 por 8' },
-      { label: 'Casa de dos plantas 12 por 9', command: 'haz una casa de 12 por 9 de dos plantas' },
-      { label: 'Describe la escena', command: 'describe la escena' },
-      { label: 'Aplica madera a la selección', command: 'aplica madera' },
-      { label: 'Deshacer', command: 'deshacer' }
+      { label: '¿Cuántos bloques y cemento?', command: '¿cuántos sacos de cemento y cuántos bloques necesito para esta casa?' },
+      { label: 'Auditar choques (Zero-Trash)', command: '¿hay algún choque entre tuberías y vigas o muros encimados?' },
+      { label: 'Muros Piso 0 a 3.00m', command: 'cambia en la tabla todos los muros del Piso 0 a 3.00 metros de altura y dime cuánto sube el material' },
+      { label: 'Segunda planta a la construcción', command: 'agrega una segunda planta a la construcción' },
+      { label: 'Cablear casa (MEP)', command: 'cablea toda la casa con focos, switches, tomas y tablero' },
+      { label: 'Terreno + aplanado + cúpula', command: 'crea terreno topográfico, aplana a +2m y pon cúpula geodésica' }
     ],
     onApplied: () => { frameScene() }
   })
@@ -1188,6 +1690,9 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       aiAutoApply = !aiAutoApply
       statusBar.setMessage(`Cerebro local «Aplicar sin confirmar» ${aiAutoApply ? 'activado' : 'desactivado'}.`)
     },
+    onToggleCosts: () => {
+      bimMasterTableView?.toggle()
+    },
     onChanged: () => {
       // El lienzo cambia de tamaño al abrir/cerrar o redimensionar paneles:
       // se recalcula el render y el menú «Ver» refleja la visibilidad real.
@@ -1208,7 +1713,6 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     { id: 'toolbox', title: t('panel.toolbox'), icon: 'ruler', elementId: 'toolbox-dock', header: '.panel__head', toggleAction: 'view.toggleToolbox' },
     { id: 'navigator', title: 'Navegador del Proyecto', icon: 'folderOpen', elementId: 'navigator-panel', header: '.panel__head', toggleAction: 'view.toggleNavigator' },
     { id: 'layers', title: t('panel.layers'), icon: 'layers', elementId: 'properties-panel', header: '.panel__head', toggleAction: 'view.toggleLayers' },
-    { id: 'costs', title: 'Costos / Presupuesto', icon: 'calculator', elementId: 'cost-panel', header: '.panel__head', toggleAction: 'view.toggleCosts' },
     { id: 'chat', title: 'Chat de IA · Astro', icon: 'astro', elementId: 'chat-panel', header: '.panel__head', hasOwnCollapse: true, toggleAction: 'view.toggleChat' }
   ]
 
@@ -1235,7 +1739,8 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     menuBar.setChecks({
       'view.toggleToolbox': layout.isVisible('toolbox'),
       'view.toggleLayers': layout.isVisible('layers'),
-      'view.toggleCosts': layout.isVisible('costs'),
+      'view.toggleCosts': bimMasterTableView?.isOpen() ?? false,
+      'view.toggleBimTable': bimMasterTableView?.isOpen() ?? false,
       'view.toggleNavigator': layout.isVisible('navigator'),
       'view.toggleChat': layout.isVisible('chat'),
       'view.toggleTimeline': timelinePanel.isVisible(),
@@ -1408,6 +1913,38 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
 
       navigationSphere.update(cameraController.state)
+
+      // Montar controlador de herramientas de Topografía (Elevation Probe y Grading Pad)
+      if (!topographyTool) {
+        topographyTool = mountTopographyTool({
+          canvas,
+          overlay,
+          scene,
+          viewport,
+          cameraClaimsGesture: (e) => orbitToolActive || (e.altKey && (e.button === 0 || e.button === 2)),
+          onMessage: (msg) => statusBar.setMessage(msg),
+          onModeChange: (m) => {
+            toolbox.setActiveTopographyMode(m)
+            if (m === 'probe') statusBar.setTool('Sacar Niveles / Cotas')
+            else if (m === 'grade') statusBar.setTool('Aplanar Terreno')
+            else statusBar.setTool('Seleccionar')
+          },
+          onGradingResult: (stats) => {
+            toolbox.setCutFillStats(stats.cutVolumeM3, stats.fillVolumeM3, stats.targetElevation)
+            selectionTransformPanel?.refresh()
+          }
+        })
+      }
+
+      // Montar panel flotante de Transformación y Adaptación de Tamaño en Tiempo Real
+      if (!selectionTransformPanel) {
+        selectionTransformPanel = mountSelectionTransformPanel({
+          overlay,
+          scene,
+          viewport,
+          onMessage: (msg) => statusBar.setMessage(msg)
+        })
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
       showMountWarning(canvasHost, `Esfera: no se pudo montar: ${reason}`)
@@ -1415,6 +1952,15 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   }
 
   mountViewportGizmos()
+
+  scene.onObjectAdded(() => topographyTool?.refreshOverlay())
+  scene.onObjectRemoved(() => topographyTool?.refreshOverlay())
+  scene.onObjectChanged((obj) => {
+    if (obj.terrainData) {
+      topographyTool?.refreshOverlay()
+      toolbox.setCutFillStats(obj.terrainData.cutVolumeM3 ?? 0, obj.terrainData.fillVolumeM3 ?? 0)
+    }
+  })
 
   /* ---------- Sincronización del estado de la vista ---------- */
 
@@ -1424,15 +1970,24 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     hud.setZoomFraction(cameraController.getZoomFraction())
     navigationSphere?.update(cameraController.state)
     annotations?.update()
+    topographyTool?.refreshOverlay()
   }
 
   function setWallTool(type: WallSegmentType): void {
+    if (type === WallSegmentType.RoomWalls) {
+      activateWallTemplate('rect')
+      return
+    }
+    orbitToolActive = false
+    roofDraft?.dispose()
+    roofDraft = null
+    annotations?.setMode(null)
+    topographyTool?.setMode('none')
     activeWallTool = type
-    toolbox.setActiveWallTool(type)
-    statusBar.setTool(TOOL_LABELS[type])
-    // Elegir una herramienta de muro pone el lienzo en modo trazo (el mensaje
-    // de `describeToolMode` es el que queda visible en la barra de estado).
     tool.setMode('wall')
+    toolbox.setActiveWallTool(type)
+    menuBar.setActiveTool(`tool.${type}`)
+    statusBar.setTool(TOOL_LABELS[type])
   }
 
   /**
@@ -1539,6 +2094,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
   /** Encuadra la cámara al contenido del modelo (ajustando al aspecto del lienzo). */
   function frameScene(): void {
+    cancelCameraAnimation()
     cameraController.frameBounds(scene.getSceneBounds(), viewport.getAspect(), viewport.getVerticalFov())
     syncViewport()
   }
@@ -1909,6 +2465,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         history.transaction('Nuevo proyecto', () => {
           scene.clear()
           annotations?.clear()
+          electricalModel.clear(false)
           // Los pisos vuelven a un único «Piso 0» (paso deshacible también).
           scene.resetLevels()
         })
@@ -1943,11 +2500,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         break
       }
       case 'file.clear':
-        history.transaction('Vaciar escena', () => {
-          scene.clear()
-          annotations?.clear()
-        })
-        statusBar.setMessage('Escena vaciada (Ctrl+Z para deshacer).')
+        void confirmAndClearScene()
         break
       /* Animación */
       // case 'animar': {} placeholder
@@ -1965,6 +2518,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       case 'edit.delete':
         deleteSelection()
         break
+      case 'edit.duplicate':
       case 'edit.copy':
         duplicateSelection()
         break
@@ -1975,12 +2529,26 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         statusBar.setMessage('Cortar: disponible cuando exista selección de objetos.')
         break
 
-      /* Dibujo: las tres herramientas de muro sí cambian el estado del motor */
+      /* Dibujo: muros simples y plantillas rápidas 2D de muros conectados */
       case 'tool.SimpleWall':
       case 'tool.StructuralSegment':
-      case 'tool.RoomWalls':
         setWallTool(actionId.replace('tool.', '') as WallSegmentType)
         break
+      case 'tool.RoomWalls':
+      case 'template.rect':
+        activateWallTemplate('rect')
+        break
+      case 'template.l':
+      case 'template.u':
+      case 'template.c':
+      case 'template.t':
+      case 'template.cross':
+      case 'template.ring':
+      case 'template.arc': {
+        const tplId = resolveWallTemplateId(actionId)
+        if (tplId) activateWallTemplate(tplId)
+        break
+      }
       case 'tool.add':
         void openAddElementDialog()
         break
@@ -2013,11 +2581,24 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
       /* Modificadores del toolbox: misma acción que cualquier otro punto de entrada */
       case 'modify.move':
+        orbitToolActive = false
+        roofDraft?.dispose()
+        roofDraft = null
+        annotations?.setMode(null)
+        topographyTool?.setMode('none')
         tool.setMode('select')
-        statusBar.setMessage('Mover: selecciona un muro u objeto y arrástralo sobre la rejilla.')
+        toolbox.setActiveActionTool('modify.move')
+        menuBar.setActiveTool(null)
+        statusBar.setTool('Mover')
+        statusBar.setMessage(
+          'Mover [V]: arrastra un muro u objeto sobre la cuadrícula · arrastra los extremos azules de un muro para estirarlo.'
+        )
+        break
+      case 'modify.rotate90':
+        rotateSelectionOrPending90()
         break
       case 'modify.copy':
-        statusBar.setMessage('Copiar: selecciona un elemento y usa Ctrl+C.')
+        duplicateSelection()
         break
       case 'modify.trim':
         statusBar.setMessage('Recortar: pendiente de implementar.')
@@ -2026,7 +2607,38 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         deleteSelection()
         break
 
+      /* Seleccionar / Cancelar trazo actual [S / Esc] sin borrar lo ya dibujado */
+      case 'tool.crosshair': {
+        const hadStroke =
+          tool.hasActiveStroke() ||
+          Boolean(roofDraft?.isActive()) ||
+          Boolean(annotations?.isActive()) ||
+          Boolean(topographyTool?.isActive()) ||
+          Boolean(electricalTool?.isActive()) ||
+          orbitToolActive
+        orbitToolActive = false
+        roofDraft?.dispose()
+        roofDraft = null
+        annotations?.setMode(null)
+        topographyTool?.setMode('none')
+        electricalTool?.cancel()
+        toolbox.setActiveElectricalDevice(null)
+        toolbox.setWiringToolActive(false)
+        tool.cancel()
+        tool.setMode('select')
+        toolbox.setActiveActionTool('tool.crosshair')
+        menuBar.setActiveTool('tool.crosshair')
+        statusBar.setTool('Seleccionar')
+        if (hadStroke) {
+          statusBar.setMessage('Trazo cancelado (lo ya dibujado se conserva). Modo Seleccionar [S] activo.')
+        }
+        break
+      }
+
       /* Vistas */
+      case 'view.toggle2d3d':
+        setViewMode(viewport.getViewMode() === '2d' ? '3d' : '2d')
+        break
       case 'aux.2d':
         setViewMode('2d')
         break
@@ -2035,7 +2647,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         break
       case 'aux.fit':
         frameScene()
-        statusBar.setMessage('Vista encuadrada al modelo.')
+        statusBar.setMessage('Vista centrada y encuadrada a toda la estructura [C / Home].')
         break
       case 'aux.reset':
         resetView()
@@ -2107,7 +2719,12 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         togglePanelVisibility('navigator')
         break
       case 'view.toggleCosts':
-        togglePanelVisibility('costs')
+      case 'view.toggleBimTable':
+        bimMasterTableView?.toggle()
+        statusBar.setMessage(
+          `Tabla Maestra BIM, Cuantificación y Costos ${bimMasterTableView?.isOpen() ? 'visible' : 'oculta'}.`
+        )
+        syncViewChecks()
         break
       case 'view.toggleChat':
         togglePanelVisibility('chat')
@@ -2134,6 +2751,12 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         commandPalette?.toggle()
         break
 
+      /* Módulos BIM: Vista Cuádruple */
+      case 'view.quadView':
+        quadViewBimManager?.toggle()
+        statusBar.setMessage('Vista Cuádruple BIM (Planta / Corte / Fachada / 3D) alternada.')
+        break
+
       /* Ayudas de dibujo */
       case 'aids.grid':
         layers.toggleVisible('grid')
@@ -2148,6 +2771,9 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         break
       case 'aids.polar':
         statusBar.setMessage('Seguimiento polar: pendiente de implementar.')
+        break
+      case 'help.shortcuts':
+        shortcutsModal.toggle()
         break
 
       /* Herramientas AEC: Muestra de verificación (Requisito A4) */
@@ -2221,6 +2847,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       animationEngine.isEditingLocked() &&
       (actionId.startsWith('edit.') ||
         actionId.startsWith('tool.') ||
+        actionId.startsWith('template.') ||
         actionId.startsWith('modify.') ||
         actionId.startsWith('level.') ||
         actionId.startsWith('aec.') ||
@@ -2296,9 +2923,12 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     controller: cameraController,
     // En modo planta (2D) la órbita se bloquea: arrastrar desplaza la vista.
     isOrbitEnabled: () => viewport.getViewMode() === '3d',
-    // Cuando la herramienta reclama el gesto (trazar, colocar, arrastrar), la
+    // Cuando la herramienta reclama el gesto (trazar, colocar, arrastrar, gizmo 3D o topografía), la
     // cámara se queda quieta y el movimiento lo gestiona el lienzo.
-    interceptsGesture: (event) => tool.intercepts(event),
+    interceptsGesture: (event) =>
+      viewport.isTransformGizmoDragging() ||
+      (event.button === 0 && !orbitToolActive && !event.altKey && (topographyTool?.isActive() ?? false)) ||
+      tool.intercepts(event),
     // La herramienta «Orbitar» (tecla O) hace orbitar con el clic izquierdo.
     isOrbitToolActive: () => orbitToolActive,
     // Depuración (F9): cada gesto y cada paso de órbita se reflejan en el panel.
@@ -2328,28 +2958,43 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
    * La paleta vive en una variable declarada antes para que el bloqueo (que se
    * evalúa en cada tecla, al pulsar) pueda consultarla sin zona muerta temporal.
    */
+  const isEditableElement = (el: Element | null): boolean => {
+    if (!el) return false
+    const tag = el.tagName
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return true
+    const htmlEl = el as HTMLElement
+    if (htmlEl.isContentEditable) return true
+    return Boolean(htmlEl.closest?.('[contenteditable="true"]'))
+  }
+
+  const hasOpenModalDialog = (): boolean => {
+    const dialogOverlayEl = document.getElementById('dialog-overlay')
+    if (dialogOverlayEl && !dialogOverlayEl.classList.contains('is-hidden')) return true
+    if (shortcutsModal.isOpen()) return true
+    const modals = document.querySelectorAll<HTMLElement>('[aria-modal="true"]:not([hidden])')
+    for (const m of modals) {
+      if (!m.classList.contains('is-hidden') && m.offsetParent !== null) return true
+    }
+    return false
+  }
+
   let commandPalette: { isOpen(): boolean; toggle(): void } | null = null
   let keybindings!: KeybindingManager
   keybindings = new KeybindingManager(actions, {
     isBlocked: (event): boolean => {
       // Los atajos del editor no deben dispararse desde el Dashboard ni el login…
       if (!isActive()) return true
-      // Si hay un diálogo modal abierto (#dialog-overlay), bloquear atajos globales del editor.
-      const dialogOverlayEl = document.getElementById('dialog-overlay')
-      if (dialogOverlayEl && !dialogOverlayEl.classList.contains('is-hidden')) return true
-      // …ni mientras se escribe en un campo (ahí las teclas son texto), salvo la
-      // propia tecla de la paleta y Ctrl+S para guardado rápido.
+      // Si hay un diálogo modal abierto (#dialog-overlay, Preferencias, Atajos…), pausar atajos del editor.
+      if (hasOpenModalDialog()) return true
+      // …ni mientras se escribe en un <input>, <textarea>, <select> o chat de IA,
+      // salvo la propia tecla de la paleta (Ctrl+K) y Ctrl+S para guardado rápido.
       const target = document.activeElement
       const resolved = keybindings.resolve(shortcutFromEvent(event))
       const isPaletteToggle: boolean = resolved === keybindings.shortcutFor('view.commandPalette')
       const isQuickSave: boolean = resolved === keybindings.shortcutFor('file.save')
-      if (
-        target &&
-        ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) &&
-        !isPaletteToggle &&
-        !isQuickSave
-      )
+      if (isEditableElement(target) && !isPaletteToggle && !isQuickSave) {
         return true
+      }
       // Con la paleta abierta sus propias teclas se gestionan en el componente,
       // salvo la tecla que la cierra de nuevo.
       return (commandPalette?.isOpen() ?? false) && !isPaletteToggle
@@ -2370,6 +3015,24 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   })
   commandPalette = paletteHandle
 
+  // Navegador fluido de cámara por teclado (`requestAnimationFrame` mientras la tecla está presionada):
+  // - 3D: Flechas orbitan/inclinan perspectiva · Shift+Flechas desplazan cámara · [+]/[-]/RePág/AvPág zoom suave.
+  // - 2D: Flechas desplazan suavemente la planta 2D evitando scroll accidental.
+  const cameraNavigator = mountKeyboardCameraNavigator({
+    controller: cameraController,
+    getViewMode: () => viewport.getViewMode(),
+    isBlocked: () =>
+      !isActive() ||
+      hasOpenModalDialog() ||
+      isEditableElement(document.activeElement) ||
+      (commandPalette?.isOpen() ?? false) ||
+      animationEngine.getState().state === 'playing',
+    onFrame: () => {
+      cancelCameraAnimation()
+      syncViewport()
+    }
+  })
+
   // Tooltips de las pestañas del dock con el atajo real (fuente única: catálogo).
   layout.setShortcuts({
     toolbox: formatShortcut(keybindings.shortcutFor('view.toggleToolbox') ?? ''),
@@ -2382,12 +3045,10 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   document.addEventListener('keydown', (event) => {
     if (!isActive()) return
     const activeEl = document.activeElement as HTMLElement | null
-    const inTextField = Boolean(
-      activeEl && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeEl.tagName)
-    )
+    const inTextField = isEditableElement(activeEl)
 
     // Esc = Cancelar herramienta activa de anotaciones
-    if (event.key === 'Escape' && annotations?.isActive()) {
+    if (event.key === 'Escape' && !hasOpenModalDialog() && annotations?.isActive()) {
       event.preventDefault()
       annotations.cancel()
       menuBar.setActiveTool('tool.crosshair')
@@ -2395,19 +3056,28 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     }
 
     // Esc = Detener reproducción (si no está detenido) y restaurar la escena.
-    if (event.key === 'Escape' && animationEngine.getState().state !== 'stopped') {
+    if (event.key === 'Escape' && !hasOpenModalDialog() && animationEngine.getState().state !== 'stopped') {
       event.preventDefault()
       stopPlayback()
       return
     }
 
-    // Espacio = Play/Pausa (solo con foco en el visor 3D).
-    if ((event.code === 'Space' || event.key === ' ') && !inTextField && !(commandPalette?.isOpen() ?? false)) {
-      const viewportContainer = document.getElementById('viewport-container')
+    // Espacio = Play/Pausa ÚNICAMENTE cuando el modo Animar o una reproducción ya está en curso;
+    // en modo normal de diseño CAD, [Espacio] alterna instantáneamente entre Vista 2D y Vista 3D.
+    const isAnimationActive =
+      animationEngine.getState().state !== 'stopped' || timelinePanel.getState().isAnimating
+    if (
+      isAnimationActive &&
+      (event.code === 'Space' || event.key === ' ') &&
+      !inTextField &&
+      !hasOpenModalDialog() &&
+      !(commandPalette?.isOpen() ?? false)
+    ) {
+      const viewportContainerEl = document.getElementById('viewport-container')
       const focusInViewport =
         activeEl === canvas ||
         activeEl === document.body ||
-        Boolean(activeEl && viewportContainer?.contains(activeEl))
+        Boolean(activeEl && viewportContainerEl?.contains(activeEl))
       if (focusInViewport) {
         event.preventDefault()
         if (animationEngine.getState().state === 'playing') {
@@ -2419,6 +3089,13 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       }
     }
 
+    // Navegación fluida de cámara con bucle `requestAnimationFrame` (Flechas, Shift+Flechas,
+    // [+]/[-] y RePág/AvPág sin Ctrl/Alt/Meta). Se procesa antes de atajos discretos para
+    // evitar saltos de auto-repetición del sistema operativo y prevenir scroll accidental.
+    if (cameraNavigator.handleKeyDown(event)) {
+      return
+    }
+
     // Los acordes (Ctrl+K …) y los atajos declarativos tienen prioridad: se
     // consultan primero para que la continuación de un acorde nunca la coma
     // el caso especial de borrado.
@@ -2426,12 +3103,9 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       event.preventDefault()
       return
     }
-    // Navegación auxiliar desde el teclado: F9 abre el panel de depuración y
-    // las flechas panan la cámara mientras el editor esté activo (la paleta y
-    // los campos de texto quedan excluidos arriba; las flechas no tienen atajo
-    // declarativo porque el navegador las usa para desplazar paneles).
-    const target = document.activeElement
-    if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
+
+    // Navegación auxiliar de depuración desde el teclado (F9 / F10).
+    if (inTextField || hasOpenModalDialog()) return
     switch (event.key) {
       case 'F9': {
         if (!isActive()) return
@@ -2445,39 +3119,26 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         event.preventDefault()
         break
       }
-      case 'ArrowUp': {
-        if (!isActive()) return
-        cameraController.pan(0, -cameraController.state.distance * cameraController.panSensitivity)
-        syncViewport()
-        statusBar.setMessage('Desplazamiento hacia arriba.')
+    }
+    // Atajo [F] / [Shift+F] / [Tab] para invertir mano/apertura de puertas y ventanas seleccionadas
+    if ((event.key === 'f' || event.key === 'F' || event.key === 'Tab') && !inTextField && !hasOpenModalDialog()) {
+      const selectedObj = scene.getSelectedObject()
+      if (selectedObj && (selectedObj.openingId || resolveObjectOpeningSpec(selectedObj))) {
         event.preventDefault()
-        break
-      }
-      case 'ArrowDown': {
-        if (!isActive()) return
-        cameraController.pan(0, cameraController.state.distance * cameraController.panSensitivity)
-        syncViewport()
-        statusBar.setMessage('Desplazamiento hacia abajo.')
-        event.preventDefault()
-        break
-      }
-      case 'ArrowLeft': {
-        if (!isActive()) return
-        cameraController.pan(cameraController.state.distance * cameraController.panSensitivity, 0)
-        syncViewport()
-        statusBar.setMessage('Desplazamiento a la izquierda.')
-        event.preventDefault()
-        break
-      }
-      case 'ArrowRight': {
-        if (!isActive()) return
-        cameraController.pan(-cameraController.state.distance * cameraController.panSensitivity, 0)
-        syncViewport()
-        statusBar.setMessage('Desplazamiento a la derecha.')
-        event.preventDefault()
-        break
+        if (event.shiftKey || event.key === 'Tab') {
+          const nextDir = toggleSwingDirection(selectedObj.swingDirection)
+          scene.updateObject(selectedObj.id, { swingDirection: nextDir })
+          statusBar.setMessage(`Apertura invertida: ${nextDir === 'in' ? 'Interior' : 'Exterior'}`)
+        } else {
+          const nextHand = toggleSwingHand(selectedObj.swingHand)
+          scene.updateObject(selectedObj.id, { swingHand: nextHand })
+          statusBar.setMessage(`Mano invertida: ${nextHand === 'left' ? 'Izquierda' : 'Derecha'}`)
+        }
+        openDoorPropertiesPanel(selectedObj, scene)
+        return
       }
     }
+
     // `Supr` / `Retroceso` borran la selección: no llevan modificador y el
     // navegador los usa para editar, así que se atienden después del gestor…
     // …pero nunca mientras se escribe en un campo (ahí borran texto).
@@ -2578,7 +3239,9 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       shapeId: object.shapeId,
       materialId: object.materialId,
       levelId: object.levelId,
-      roofProps: object.roofProps
+      roofProps: object.roofProps,
+      structuralParams: cloneStructuralParams(object.structuralParams),
+      terrainData: cloneTerrainData(object.terrainData)
     }))
   }
 
@@ -2595,7 +3258,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
   }
 
   /** Abre el modal moderno de Importación de archivos. */
-  function openImportModal(): void {
+  function openImportModal(initialCategory?: '3d' | '2d' | 'topo' | 'bim' | 'ref'): void {
     const overlay = document.getElementById('dialog-overlay')
     const bridge = (window as unknown as { arqStudio?: { app?: ImportAppBridge } })
       .arqStudio?.app
@@ -2628,7 +3291,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
           currentProjectName = importedName
         }
       }
-    }).open()
+    }).open(initialCategory)
   }
 
   /**
@@ -2694,6 +3357,13 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       animation: timelinePanel.toJSON(),
       annotationItems: annotations ? annotations.getItems() : []
     })
+
+    if (currentProjectId) {
+      await databaseService.setSetting(
+        `arqstudio.mep.${currentProjectId}`,
+        JSON.stringify(electricalModel.toJSON())
+      )
+    }
 
     if (exportJsonCopy) {
       const appBridge = (
@@ -2824,6 +3494,23 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       void materialPalette.loadProjectSettings()
     }
 
+    // Instalación MEP Eléctrica persistida del proyecto
+    if (currentProjectId) {
+      void databaseService.getSetting(`arqstudio.mep.${currentProjectId}`).then((mepRaw) => {
+        if (mepRaw) {
+          try {
+            electricalModel.load(JSON.parse(mepRaw))
+          } catch {
+            electricalModel.clear(false)
+          }
+        } else {
+          electricalModel.clear(false)
+        }
+      })
+    } else {
+      electricalModel.clear(false)
+    }
+
     // El historial arranca limpio: el estado inicial es el proyecto abierto.
     history.clear()
     applyHistoryState()
@@ -2914,6 +3601,8 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       materialId: obj.materialId,
       levelId: obj.levelId,
       roofProps: obj.roofProps,
+      structuralParams: cloneStructuralParams(obj.structuralParams),
+      terrainData: cloneTerrainData(obj.terrainData),
       layer: obj.layer,
       includeInCosts: obj.includeInCosts,
       openingVariant: obj.openingVariant,
@@ -3103,6 +3792,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     try {
       scene.clear()
       annotations?.clear()
+      electricalModel.clear(false)
     } finally {
       isRestoringOrSyncingScene = false
     }
@@ -3133,6 +3823,24 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
 
   async function applyImportedFile(imported: ImportedFileResult): Promise<void> {
     const params = imported.transformParams
+
+    if (imported.parsedTopography) {
+      const terrainObj = createImportedTerrainObject(
+        imported.parsedTopography,
+        imported.fileName,
+        params
+      )
+      history.transaction(`Importar Topografía ${imported.parsedTopography.format}`, () => {
+        scene.addObject(terrainObj)
+        scene.selectObject(terrainObj)
+      })
+      const msg = `Terreno 3D generado (${imported.parsedTopography.points.length} puntos · ${terrainObj.size.x.toFixed(1)}×${terrainObj.size.z.toFixed(1)} m).`
+      statusBar.setMessage(msg)
+      showToast({ title: 'Terreno topográfico 3D generado', subtitle: msg })
+      frameScene()
+      await saveScene()
+      return
+    }
 
     if (imported.parsedModel) {
       const cleanObjName = imported.fileName.replace(/\.(glb|gltf|obj|stl)$/i, '') || 'Modelo 3D'

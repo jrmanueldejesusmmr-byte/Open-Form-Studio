@@ -57,6 +57,8 @@ export interface SerializedSceneObject {
   openingId: string | null
   openingAngle: number
   visible: boolean
+  structuralParams?: import('../models/StructuralTypes').StructuralParams | null
+  terrainData?: import('../models/TerrainTypes').TerrainData | null
 }
 
 export interface SerializedLayer {
@@ -202,7 +204,9 @@ export function serializeProjectState(params: {
     openingVariant: obj.openingVariant ?? null,
     openingId: obj.openingId ?? null,
     openingAngle: obj.openingAngle ?? 0,
-    visible: obj.visible ?? true
+    visible: obj.visible ?? true,
+    structuralParams: obj.structuralParams ? structuredClone(obj.structuralParams) : null,
+    terrainData: obj.terrainData ? structuredClone(obj.terrainData) : null
   }))
 
   const serializedLayers: SerializedLayer[] = layers
@@ -421,7 +425,15 @@ export function parseProjectJson(rawText: string): SerializedProjectFile {
       openingVariant: typeof o.openingVariant === 'string' ? o.openingVariant : null,
       openingId: typeof o.openingId === 'string' ? o.openingId : null,
       openingAngle: Number(o.openingAngle) || 0,
-      visible: o.visible === undefined ? true : Boolean(o.visible)
+      visible: o.visible === undefined ? true : Boolean(o.visible),
+      structuralParams:
+        o.structuralParams && typeof o.structuralParams === 'object'
+          ? (o.structuralParams as import('../models/StructuralTypes').StructuralParams)
+          : null,
+      terrainData:
+        o.terrainData && typeof o.terrainData === 'object'
+          ? (o.terrainData as import('../models/TerrainTypes').TerrainData)
+          : null
     }
   })
 
@@ -546,7 +558,9 @@ export function applySerializedProjectToWorkspace(
       openingVariant: o.openingVariant,
       openingId: o.openingId,
       openingAngle: o.openingAngle,
-      visible: o.visible ?? true
+      visible: o.visible ?? true,
+      structuralParams: o.structuralParams ?? null,
+      terrainData: o.terrainData ?? null
     }
     scene.restoreObject(snap)
   }
@@ -657,7 +671,9 @@ export async function saveProjectToStorage(params: {
     openingVariant: o.openingVariant,
     openingId: o.openingId,
     openingAngle: o.openingAngle,
-    visible: o.visible
+    visible: o.visible,
+    structuralParams: o.structuralParams ?? null,
+    terrainData: o.terrainData ?? null
   }))
 
   const levelsDoc = JSON.stringify({

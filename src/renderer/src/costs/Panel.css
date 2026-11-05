@@ -4,8 +4,8 @@
   gap: 12px;
   padding: 12px;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  color: #e8eaed;
-  background: #15171b;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -22,6 +22,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .cost-panel__actions {
@@ -30,10 +31,10 @@
 }
 
 .cost-panel__section {
-  border: 1px solid #262a31;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 10px;
-  background: #1b1e24;
+  background: var(--bg-elevated);
 }
 
 .cost-panel__section-head {
@@ -54,15 +55,15 @@
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
-  color: #9aa4b2;
+  color: var(--text-secondary);
 }
 
 .cost-panel__params input {
   padding: 6px 8px;
   border-radius: 4px;
-  border: 1px solid #2f343c;
-  background: #0b0c0e;
-  color: #e8eaed;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .cost-panel__summary {
@@ -80,7 +81,7 @@
 }
 
 .cost-sum-row.notes {
-  color: #9aa4b2;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -97,23 +98,23 @@
 .cost-panel__table th, .cost-panel__table td {
   padding: 8px 8px;
   text-align: left;
-  border-bottom: 1px solid #262a31;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .cost-panel__table th {
-  background: #20242b;
-  color: #9aa4b2;
+  background: var(--bg-chrome);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
-.cost-panel__table tbody tr:hover { background: #20242b; }
+.cost-panel__table tbody tr:hover { background: var(--bg-hover); }
 
 .cost-table__action { text-align: right; }
 
 .link {
   background: none;
   border: 0;
-  color: #58a6ff;
+  color: var(--accent-color);
   cursor: pointer;
   font-size: 12px;
 }
@@ -121,7 +122,7 @@
 .link:hover { text-decoration: underline; }
 
 .cost-panel__count {
-  color: #9aa4b2;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -132,9 +133,9 @@
   font-size: 13px;
 }
 
-.icon {
+.cost-panel .icon {
   display: inline-block;
-  color: #58a6ff;
+  color: var(--accent-color);
 }
 
 /* Pestañas de vista Resumen/Detalle */
@@ -145,9 +146,9 @@
 }
 
 .cost-panel__tab {
-  border: 1px solid #262a31;
-  background: #1b1e24;
-  color: #9aa4b2;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   padding: 6px 14px;
   border-radius: 6px 6px 0 0;
   cursor: pointer;
@@ -156,18 +157,18 @@
   transition: background 0.15s, color 0.15s;
 }
 
-.cost-panel__tab:hover { color: #e8eaed; background: #20242b; }
+.cost-panel__tab:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 .cost-panel__tab--active {
-  color: #e8eaed;
-  background: #20242b;
-  border-bottom-color: #343a44;
+  color: var(--text-primary);
+  background: var(--bg-active);
+  border-bottom-color: var(--accent-color);
 }
 
 /* Totales (sección superior del panel) */
 .cost-panel__section--summary {
-  border-color: #262a31;
-  background: linear-gradient(180deg, #1b1e24 0%, #171a1f 100%);
+  border-color: var(--border-color);
+  background: var(--bg-elevated);
 }
 
 .cost-sum-row {

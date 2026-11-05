@@ -285,10 +285,28 @@ export class HistoryManager {
         this.scene.setObjectMaterial(command.id, snapshot.materialId ?? null)
         const obj = this.scene.getObject(command.id)
         if (obj) {
+          obj.name = snapshot.name
           obj.size.set(snapshot.size.width, snapshot.size.height, snapshot.size.depth)
           obj.color = snapshot.color
           obj.openingAngle = snapshot.openingAngle ?? 0
           obj.visible = snapshot.visible ?? true
+          obj.structuralParams = snapshot.structuralParams ? { ...snapshot.structuralParams } : null
+          obj.terrainData = snapshot.terrainData
+            ? {
+                ...snapshot.terrainData,
+                heights: [...snapshot.terrainData.heights],
+                originalHeights: [...snapshot.terrainData.originalHeights],
+                gradingPads: snapshot.terrainData.gradingPads
+                  ? snapshot.terrainData.gradingPads.map((p) => ({
+                      ...p,
+                      points: p.points.map((pt) => ({ ...pt }))
+                    }))
+                  : [],
+                spotElevations: snapshot.terrainData.spotElevations
+                  ? snapshot.terrainData.spotElevations.map((s) => ({ ...s }))
+                  : []
+              }
+            : null
         }
         this.scene.moveObject(
           command.id,

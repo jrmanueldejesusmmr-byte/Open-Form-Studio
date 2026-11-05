@@ -16,6 +16,16 @@ import {
 } from '../services/CollaborationService'
 import { showToast } from './Toast'
 import { renderNotificationsDropdown } from './NotificationsDropdown'
+import logoUrl from '../assets/logo.png'
+import {
+  themeManager,
+  BACKGROUND_THEMES,
+  ACCENT_COLORS,
+  type BackgroundThemeId,
+  type AccentColorId,
+  type WorkBgStyleId,
+  type RenderQuality
+} from '../services/ThemeManager'
 
 /**
  * Pantalla inicial de la aplicación: «Mis proyectos».
@@ -167,8 +177,13 @@ export function mountDashboard(container: HTMLElement, options: DashboardOptions
         <!-- TitleBar superior estilo OS -->
         <header class="dash__topbar">
           <div class="dash__brand">
-            <span class="dash__brand-mark">${icon('cube', 15)}</span>
-            <span class="dash__brand-name">ArqStudio</span>
+            <span class="dash__brand-mark" title="Open Form Studio">
+              <img class="brand-logo-img" src="${logoUrl}" alt="Open Form Studio Logo" />
+            </span>
+            <span class="brand-title">
+              <strong class="brand-title__bold">OPEN FORM</strong>
+              <span class="brand-title__light">STUDIO</span>
+            </span>
             <span class="dash__brand-badge">3D</span>
           </div>
 
@@ -374,6 +389,13 @@ export function mountDashboard(container: HTMLElement, options: DashboardOptions
     paintInbox()
   })
 
+  // Suscripción a cambios de tema en vivo
+  themeManager.subscribe(() => {
+    if (section === 'settings') {
+      renderContent()
+    }
+  })
+
   document.addEventListener('pointerdown', (ev) => {
     if (!inboxOpen) return
     const target = ev.target as HTMLElement | null
@@ -548,6 +570,62 @@ export function mountDashboard(container: HTMLElement, options: DashboardOptions
         const index = Number(actionElement.getAttribute('data-template-index') ?? '-1')
         const template = TEMPLATES[index]
         if (template) options.onUseTemplate(template)
+        break
+      }
+      case 'set-theme': {
+        const themeId = actionElement.dataset.themeId as BackgroundThemeId
+        if (themeId) {
+          themeManager.setTheme(themeId)
+          renderContent()
+        }
+        break
+      }
+      case 'set-accent': {
+        const accentId = actionElement.dataset.accentId as AccentColorId
+        if (accentId) {
+          themeManager.setAccent(accentId)
+          renderContent()
+        }
+        break
+      }
+      case 'set-bg-style': {
+        const style = actionElement.dataset.bgStyle as WorkBgStyleId
+        if (style) {
+          themeManager.setWorkBgStyle(style)
+          renderContent()
+        }
+        break
+      }
+      case 'set-quality': {
+        const quality = actionElement.dataset.quality as RenderQuality
+        if (quality) {
+          themeManager.setRenderQuality(quality)
+          renderContent()
+        }
+        break
+      }
+      case 'toggle-hardware-accel': {
+        const current = themeManager.getConfig().hardwareAcceleration
+        themeManager.setHardwareAcceleration(!current)
+        renderContent()
+        break
+      }
+      case 'save-theme-settings': {
+        showToast({
+          title: 'Configuración guardada',
+          subtitle: 'La personalización visual se aplicó correctamente.',
+          type: 'success'
+        })
+        break
+      }
+      case 'reset-theme-settings': {
+        themeManager.resetToDefaults()
+        renderContent()
+        showToast({
+          title: 'Valores restablecidos',
+          subtitle: 'Se ha restaurado el tema original por defecto.',
+          type: 'info'
+        })
         break
       }
     }
@@ -734,39 +812,196 @@ export function mountDashboard(container: HTMLElement, options: DashboardOptions
         : 'Local hasta iniciar sesión'
       : 'Local (este equipo)'
 
+    const currentConfig = themeManager.getConfig()
+    const activeTheme = BACKGROUND_THEMES[currentConfig.themeId] || BACKGROUND_THEMES['deep-dark']
+
+    const themesList = (Object.keys(BACKGROUND_THEMES) as BackgroundThemeId[])
+      .map((id) => {
+        const theme = BACKGROUND_THEMES[id]
+        const isSelected = theme.id === currentConfig.themeId
+        return `
+          <button
+            type="button"
+            class="theme-option-card ${isSelected ? 'is-selected' : ''}"
+            data-dash-action="set-theme"
+            data-theme-id="${theme.id}"
+            title="${escapeHtml(theme.name)} — ${escapeHtml(theme.subtitle)}"
+          >
+            <div class="theme-preview-circle theme-circle--${theme.id}"></div>
+            <span class="theme-option-label">${escapeHtml(theme.name)}</span>
+          </button>
+        `
+      })
+      .join('')
+
+    const accentsList = (Object.keys(ACCENT_COLORS) as AccentColorId[])
+      .map((id) => {
+        const acc = ACCENT_COLORS[id]
+        const isSelected = acc.id === currentConfig.accentId
+        return `
+          <button
+            type="button"
+            class="accent-option-dot ${isSelected ? 'is-selected' : ''}"
+            data-dash-action="set-accent"
+            data-accent-id="${acc.id}"
+            style="background-color: ${acc.hex};"
+            title="${escapeHtml(acc.name)} (${acc.hex})"
+            aria-label="${escapeHtml(acc.name)}"
+          ></button>
+        `
+      })
+      .join('')
+
     return `
       <div class="dash__header">
         <div class="dash__header-info">
-          <h1 class="dash__title">Configuración</h1>
-          <p class="dash__subtitle">Ajustes generales, estado de conexión y cuenta de usuario.</p>
+          <h1 class="dash__title">Configuración de la Aplicación</h1>
+          <p class="dash__subtitle">Personaliza la apariencia gráfica, temas visuales y preferencias del sistema.</p>
         </div>
       </div>
-      <div class="dash__panels">
-        <section class="dash__panel">
-          <h2 class="dash__panel-title">Conexión con Supabase</h2>
-          <dl class="dash__facts">
-            <div><dt>Claves en el .env</dt><dd>${cloudConfigured ? 'Detectadas' : 'Sin configurar'}</dd></div>
-            <div><dt>Modo de datos</dt><dd>${dataMode}</dd></div>
-            <div><dt>Proyectos cargados</dt><dd>${projects.length}</dd></div>
-          </dl>
-          ${cloudConfigured ? '' : `<p class="dash__hint">${icon('info', 14)}<span>${SUPABASE_SETUP_HINT}</span></p>`}
+
+      <div class="settings-view">
+        <!-- Panel 1: Personalización de Interfaz (Theme & Colors) -->
+        <section class="settings-card">
+          <div class="settings-card__header">
+            <h2 class="settings-section-title">Personalización de Interfaz</h2>
+            <p class="settings-section-sub">Theme &amp; Colors</p>
+          </div>
+
+          <!-- Selector de Temas de Fondo -->
+          <div class="settings-field-group">
+            <div class="settings-field-header">
+              <span class="settings-group-title">Temas de Fondo</span>
+              <span class="settings-group-subtitle">${escapeHtml(activeTheme.subtitle)}</span>
+            </div>
+            <div class="theme-picker-grid">
+              ${themesList}
+            </div>
+          </div>
+
+          <!-- Selector de Color de Acento -->
+          <div class="settings-field-group" style="margin-top: 24px;">
+            <span class="settings-group-title">Color de Acento</span>
+            <div class="accent-picker-row">
+              ${accentsList}
+            </div>
+          </div>
+
+          <!-- Selector de Estilo de Fondo de Trabajo -->
+          <div class="settings-field-group" style="margin-top: 24px;">
+            <div class="settings-group-row">
+              <span class="settings-group-title">Estilo de Fondo de Trabajo</span>
+              <div class="segmented-control" role="group" aria-label="Estilo de Fondo de Trabajo">
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.workBgStyle === 'grid' ? 'is-selected' : ''}"
+                  data-dash-action="set-bg-style"
+                  data-bg-style="grid"
+                >Grid/Retícula</button>
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.workBgStyle === 'dots' ? 'is-selected' : ''}"
+                  data-dash-action="set-bg-style"
+                  data-bg-style="dots"
+                >Puntos</button>
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.workBgStyle === 'solid' ? 'is-selected' : ''}"
+                  data-dash-action="set-bg-style"
+                  data-bg-style="solid"
+                >Sólido</button>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section class="dash__panel">
-          <h2 class="dash__panel-title">Cuenta</h2>
-          ${
-            user
-              ? `<dl class="dash__facts">
-                   <div><dt>Usuario</dt><dd>${escapeHtml(user.name)}</dd></div>
-                   <div><dt>Correo</dt><dd>${escapeHtml(user.email)}</dd></div>
-                   <div><dt>Identificador</dt><dd>${escapeHtml(user.id)}</dd></div>
-                 </dl>
-                 <button class="dash__panel-button" type="button" data-dash-action="signout">${icon('logOut', 15)}<span>Cerrar sesión</span></button>`
-              : `<p class="dash__hint">${icon('user', 14)}<span>Estás como invitado: puedes explorar la app, pero para crear o editar proyectos hay que iniciar sesión.</span></p>
-                 <button class="dash__panel-button dash__panel-button--primary" type="button" data-dash-action="auth">${icon('lock', 15)}<span>Iniciar sesión / Registrarse</span></button>`
-          }
+        <!-- Panel 2: Motor y Rendimiento -->
+        <section class="settings-card">
+          <div class="settings-field-group">
+            <div class="settings-group-row">
+              <span class="settings-group-title">Ajustes de Renderizado 3D</span>
+              <div class="segmented-control" role="group" aria-label="Ajustes de Renderizado 3D">
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.renderQuality === 'high' ? 'is-selected' : ''}"
+                  data-dash-action="set-quality"
+                  data-quality="high"
+                >Alto</button>
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.renderQuality === 'medium' ? 'is-selected' : ''}"
+                  data-dash-action="set-quality"
+                  data-quality="medium"
+                >Medio</button>
+                <button
+                  type="button"
+                  class="segmented-btn ${currentConfig.renderQuality === 'low' ? 'is-selected' : ''}"
+                  data-dash-action="set-quality"
+                  data-quality="low"
+                >Bajo</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-field-group" style="margin-top: 22px;">
+            <div class="hw-switch-row">
+              <div>
+                <span class="settings-group-title" style="margin-bottom:0">Aceleración por Hardware</span>
+                <p class="settings-group-desc">Aprovecha la GPU dedicada para un renderizado 3D fluido y eficiente.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked="${currentConfig.hardwareAcceleration}"
+                class="ui-toggle ${currentConfig.hardwareAcceleration ? 'is-active' : ''}"
+                data-dash-action="toggle-hardware-accel"
+                title="Alternar aceleración por hardware"
+              >
+                <span class="ui-toggle-thumb"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Botones de Acción -->
+          <div class="settings-footer-actions">
+            <button class="dash__btn-primary" type="button" data-dash-action="save-theme-settings">
+              <span>Guardar cambios</span>
+            </button>
+            <button class="dash__btn-secondary" type="button" data-dash-action="reset-theme-settings">
+              <span>Restablecer predeterminados</span>
+            </button>
+          </div>
         </section>
-      </div>`
+
+        <!-- Paneles de Conexión y Cuenta -->
+        <div class="dash__panels" style="margin-top: 4px;">
+          <section class="dash__panel">
+            <h2 class="dash__panel-title">Conexión con Supabase</h2>
+            <dl class="dash__facts">
+              <div><dt>Claves en el .env</dt><dd>${cloudConfigured ? 'Detectadas' : 'Sin configurar'}</dd></div>
+              <div><dt>Modo de datos</dt><dd>${dataMode}</dd></div>
+              <div><dt>Proyectos cargados</dt><dd>${projects.length}</dd></div>
+            </dl>
+            ${cloudConfigured ? '' : `<p class="dash__hint">${icon('info', 14)}<span>${SUPABASE_SETUP_HINT}</span></p>`}
+          </section>
+
+          <section class="dash__panel">
+            <h2 class="dash__panel-title">Cuenta</h2>
+            ${
+              user
+                ? `<dl class="dash__facts">
+                     <div><dt>Usuario</dt><dd>${escapeHtml(user.name)}</dd></div>
+                     <div><dt>Correo</dt><dd>${escapeHtml(user.email)}</dd></div>
+                     <div><dt>Identificador</dt><dd>${escapeHtml(user.id)}</dd></div>
+                   </dl>
+                   <button class="dash__panel-button" type="button" data-dash-action="signout">${icon('logOut', 15)}<span>Cerrar sesión</span></button>`
+                : `<p class="dash__hint">${icon('user', 14)}<span>Estás como invitado: puedes explorar la app, pero para crear o editar proyectos hay que iniciar sesión.</span></p>
+                   <button class="dash__panel-button dash__panel-button--primary" type="button" data-dash-action="auth">${icon('lock', 15)}<span>Iniciar sesión / Registrarse</span></button>`
+            }
+          </section>
+        </div>
+      </div>
+    `
   }
 
   function renderContent(): void {

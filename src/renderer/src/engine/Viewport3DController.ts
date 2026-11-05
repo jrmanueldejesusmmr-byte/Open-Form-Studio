@@ -28,6 +28,16 @@ export class Viewport3DController {
     this.state.clampPitch()
   }
 
+  /**
+   * Órbita la cámara directamente en radianes (azimutal `deltaYaw` y polar `deltaPitch`),
+   * usado por el bucle fluido `requestAnimationFrame` de navegación por teclado.
+   */
+  orbitAngles(deltaYaw: number, deltaPitch: number): void {
+    this.state.yaw += deltaYaw
+    this.state.pitch += deltaPitch
+    this.state.clampPitch()
+  }
+
   /** Desplaza el punto target en el plano de la pantalla (pan). */
   pan(deltaX: number, deltaY: number): void {
     const camPos = this.state.computePosition()
@@ -42,6 +52,21 @@ export class Viewport3DController {
       .add(up.multiplyScalar(deltaY * scale))
 
     this.state.target.add(offset)
+  }
+
+  /**
+   * Desplaza `target` (y con él la cámara) sobre el plano horizontal XZ
+   * según el ángulo azimutal actual (`yaw`), escalado por `distance`.
+   *
+   * - `rightStep > 0`: desplaza lateralmente a la derecha (+X con `yaw = 0`).
+   * - `forwardStep > 0`: desplaza hacia adelante en 3D o hacia arriba en Planta 2D (−Z con `yaw = 0`).
+   */
+  panPlanar(rightStep: number, forwardStep: number): void {
+    const sinY = Math.sin(this.state.yaw)
+    const cosY = Math.cos(this.state.yaw)
+    const scale = Math.max(this.state.distance, 1)
+    this.state.target.x += (cosY * rightStep - sinY * forwardStep) * scale
+    this.state.target.z += (-sinY * rightStep - cosY * forwardStep) * scale
   }
 
   /**

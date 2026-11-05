@@ -158,10 +158,12 @@ export async function run(outDir: string): Promise<void> {
     const loader = new GLTFLoader()
     const gltf = await new Promise<{ scene: THREE.Group }>((resolve, reject) => {
       loader.parse(
-        bytes.buffer.slice(0) as ArrayBuffer,
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
         '',
         (result) => resolve(result as { scene: THREE.Group }),
-        (event) => reject(event.error ?? new Error('error GLB'))
+        (event) => {
+          reject((event as { error?: Error })?.error ?? new Error('error GLB'))
+        }
       )
     })
     const box = new THREE.Box3().setFromObject(gltf.scene)
