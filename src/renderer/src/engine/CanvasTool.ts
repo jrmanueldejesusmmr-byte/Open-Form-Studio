@@ -97,6 +97,8 @@ export interface CanvasToolOptions {
   onModeChange?: (mode: ToolMode) => void
   onTemplateStateChange?: (state: WallTemplateState | null) => void
   onMessage: (message: string) => void
+  /** Callback para enfocar y re-centrar suavemente el pivote de cámara en el punto clickeado. */
+  onFocusPoint?: (point: THREE.Vector3) => void
   /** Devuelve `true` cuando el visitante va a manejar el gesto de cámara (Alt+izq,
    *  o la herramienta «Orbitar» activa), de modo que `CanvasTool` se abstenga de
    *  dibujar/colocar y deje pasar el clic. */
@@ -1113,6 +1115,19 @@ export function mountCanvasTool(options: CanvasToolOptions): CanvasToolHandle {
           : `«${obj.name}» cerrada (0°).`
       )
       openDoorPropertiesPanel(obj, scene)
+      return
+    }
+
+    // Raycast para enfocar y re-centrar suavemente el pivote de cámara en cualquier elemento 3D
+    const surfaceHit = viewport.pickSurface(e.clientX, e.clientY)
+    if (surfaceHit) {
+      options.onFocusPoint?.(surfaceHit.point)
+      return
+    }
+
+    const groundHit = viewport.pointerToPlane(e.clientX, e.clientY, 0)
+    if (groundHit) {
+      options.onFocusPoint?.(groundHit)
     }
   }
 

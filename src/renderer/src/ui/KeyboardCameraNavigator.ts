@@ -1,7 +1,17 @@
 import type { Viewport3DController } from '../engine/Viewport3DController'
 import type { ViewMode } from '../engine/ViewportRenderer'
 
-export type NavChannel = 'left' | 'right' | 'up' | 'down' | 'zoomIn' | 'zoomOut'
+export type NavChannel =
+  | 'left'
+  | 'right'
+  | 'up'
+  | 'down'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'panForward'
+  | 'panBackward'
+  | 'panLeft'
+  | 'panRight'
 
 export interface KeyboardCameraNavigatorOptions {
   controller: Viewport3DController
@@ -46,6 +56,12 @@ export function resolveNavChannel(event: Pick<KeyboardEvent, 'key' | 'code'>): N
   if (key === 'ArrowRight') return 'right'
   if (key === 'ArrowUp') return 'up'
   if (key === 'ArrowDown') return 'down'
+
+  // Teclas [W, A, S, D] para desplazarse (caminar) por el terreno suavemente
+  if (key === 'w' || key === 'W' || code === 'KeyW') return 'panForward'
+  if (key === 's' || key === 'S' || code === 'KeyS') return 'panBackward'
+  if (key === 'a' || key === 'A' || code === 'KeyA') return 'panLeft'
+  if (key === 'd' || key === 'D' || code === 'KeyD') return 'panRight'
 
   if (
     key === 'PageUp' ||
@@ -138,6 +154,8 @@ export function mountKeyboardCameraNavigator(
     const horiz = (held.has('right') ? 1 : 0) - (held.has('left') ? 1 : 0)
     const vert = (held.has('up') ? 1 : 0) - (held.has('down') ? 1 : 0)
     const zoomDir = (held.has('zoomIn') ? 1 : 0) - (held.has('zoomOut') ? 1 : 0)
+    const walkForward = (held.has('panForward') ? 1 : 0) - (held.has('panBackward') ? 1 : 0)
+    const walkRight = (held.has('panRight') ? 1 : 0) - (held.has('panLeft') ? 1 : 0)
 
     let changed = false
 
@@ -150,9 +168,17 @@ export function mountKeyboardCameraNavigator(
         // Shift + Flechas en 3D: desplazamiento horizontal sobre el plano del proyecto
         controller.panPlanar(horiz * PAN_3D_SPEED * dt, vert * PAN_3D_SPEED * dt)
       } else {
-        // Flechas solas en 3D: órbita azimutal (←/→) e inclinación polar (↑/↓)
+        // Flechas solas en 3D: órbita horizontal azimutal (←/→) e inclinación polar (↑/↓)
         controller.orbitAngles(horiz * ORBIT_YAW_SPEED * dt, vert * ORBIT_PITCH_SPEED * dt)
       }
+      changed = true
+    }
+
+    if (walkForward !== 0 || walkRight !== 0) {
+      // Teclas [W, A, S, D]: desplazan cámara y pivote juntos sobre el terreno
+      const mode = getViewMode()
+      const speed = mode === '2d' ? PAN_2D_SPEED : PAN_3D_SPEED
+      controller.panPlanar(walkRight * speed * dt, walkForward * speed * dt)
       changed = true
     }
 

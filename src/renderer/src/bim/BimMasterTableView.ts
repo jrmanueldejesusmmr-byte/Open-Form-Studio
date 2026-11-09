@@ -26,16 +26,16 @@ export function mountBimMasterTableView(
   let isMaximized = false
   let selectedRowId: string | null = null
 
-  // Crear elemento del panel
+  // Crear elemento del panel (inicia minimizado/oculto para dejar el 100% del visor 3D despejado)
   const panelEl = document.createElement('div')
-  panelEl.className = 'bim-table-panel'
+  panelEl.className = 'bim-table-panel is-hidden'
   panelEl.setAttribute('id', 'bim-master-table-panel')
   container.appendChild(panelEl)
 
   // Botón flotante para abrir/cerrar
   const toggleBtn = document.createElement('button')
   toggleBtn.className = 'bim-table-toggle-btn'
-  toggleBtn.innerHTML = `<span>💰</span><span>Tabla Maestra BIM y Costos (Live)</span>`
+  toggleBtn.innerHTML = `<span>📊</span><span>Tabla Maestra BIM y Costos (Live)</span>`
   toggleBtn.title = 'Abrir / Cerrar Tabla Maestra BIM, Cuantificación y Presupuesto en Vivo'
   container.appendChild(toggleBtn)
 

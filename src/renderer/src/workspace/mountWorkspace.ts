@@ -733,6 +733,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     onTemplateStateChange: (state) => {
       wallTemplateHud?.update(state)
     },
+    onFocusPoint: (point) => focusOnPoint(point),
     onMessage: (message) => statusBar.setMessage(message)
   })
 
@@ -1806,6 +1807,166 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     cameraAnimHandle = window.requestAnimationFrame(frame)
   }
 
+  /**
+   * Transición animada completa de cámara (pivote target, yaw, pitch y distancia)
+   * con aceleración/frenado suave (ease-in-out) y trayectoria mínima angular.
+   */
+  function animateCameraComplete(
+    targetPos: THREE.Vector3,
+    targetYaw: number,
+    targetPitch: number,
+    targetDistance?: number,
+    durationMs = 350
+  ): void {
+    cancelCameraAnimation()
+    const startTarget = cameraController.state.target.clone()
+    const startYaw = cameraController.state.yaw
+    const startPitch = cameraController.state.pitch
+    const startDistance = cameraController.state.distance
+    const endDistance = targetDistance ?? startDistance
+
+    const rawDelta = targetYaw - startYaw
+    const deltaYaw = ((((rawDelta + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
+    const deltaPitch = targetPitch - startPitch
+    const startedAt = performance.now()
+
+    const frame = (now: number): void => {
+      const t = Math.min((now - startedAt) / durationMs, 1)
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+
+      cameraController.state.target.lerpVectors(startTarget, targetPos, ease)
+      cameraController.state.yaw = startYaw + deltaYaw * ease
+      cameraController.state.pitch = startPitch + deltaPitch * ease
+      cameraController.state.distance = startDistance + (endDistance - startDistance) * ease
+
+      syncViewport()
+      debugPanel?.updateCamera(cameraController.state, viewport.getViewMode(), tool.getMode())
+
+      if (t < 1) {
+        cameraAnimHandle = window.requestAnimationFrame(frame)
+      } else {
+        cameraAnimHandle = 0
+        cameraController.state.target.copy(targetPos)
+        cameraController.state.yaw = startYaw + deltaYaw
+        cameraController.state.pitch = startPitch + deltaPitch
+        cameraController.state.distance = endDistance
+        syncViewport()
+      }
+    }
+    cameraAnimHandle = window.requestAnimationFrame(frame)
+  }
+
+  /**
+   * Re-centra suavemente el pivote de la cámara (controls.target) hacia cualquier
+   * punto 3D clickeado mediante Doble Clic, permitiendo orbitar alrededor de ese detalle.
+   */
+  function focusOnPoint(point: THREE.Vector3, durationMs = 280): void {
+    cancelCameraAnimation()
+    const startTarget = cameraController.state.target.clone()
+    const startedAt = performance.now()
+
+    const frame = (now: number): void => {
+      const t = Math.min((now - startedAt) / durationMs, 1)
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+      cameraController.state.target.lerpVectors(startTarget, point, ease)
+      syncViewport()
+      if (t < 1) {
+        cameraAnimHandle = window.requestAnimationFrame(frame)
+      } else {
+        cameraAnimHandle = 0
+        cameraController.state.target.copy(point)
+        syncViewport()
+      }
+    }
+    cameraAnimHandle = window.requestAnimationFrame(frame)
+    statusBar.setMessage(`🎯 Pivote de cámara enfocado en detalle (${point.x.toFixed(2)}, ${point.z.toFixed(2)}).`)
+  }
+
+  /**
+   * Calcula la caja delimitadora de muros, losas, techos y elementos en la escena
+   * y ancla el pivote (controls.target) al centro geométrico exacto de la estructura.
+   * Con autoFrame = true ajusta además la distancia y ángulo isométrico limpio.
+   */
+  function updateCameraPivotToStructure(autoFrame = false, animate = true): void {
+    const { hasGeometry, center, radius } = scene.getStructureBounds()
+    if (!hasGeometry) return
+
+    const targetY = center.y > 0.5 ? center.y : 1.5
+    const structureCenter = new THREE.Vector3(center.x, targetY, center.z)
+
+    if (autoFrame) {
+      const targetDistance = Math.max(radius * 2.2, 6.5)
+      const targetYaw = Math.PI / 4 // Ángulo isométrico 45°
+      const targetPitch = Math.PI / 6 // 30°
+
+      if (animate) {
+        animateCameraComplete(structureCenter, targetYaw, targetPitch, targetDistance, 350)
+      } else {
+        cancelCameraAnimation()
+        cameraController.state.target.copy(structureCenter)
+        cameraController.state.distance = targetDistance
+        cameraController.state.yaw = targetYaw
+        cameraController.state.pitch = targetPitch
+        syncViewport()
+      }
+    } else {
+      cameraController.state.target.copy(structureCenter)
+      syncViewport()
+    }
+  }
+
+  /**
+   * Vistas rápidas de perspectiva con 1 clic o teclas numéricas [1] a [6],
+   * manteniendo siempre la casa fija en el centro de la pantalla.
+   */
+  function setQuickView(viewIndex: 1 | 2 | 3 | 4 | 5 | 6): void {
+    if (viewIndex === 6) {
+      setViewMode('2d')
+      frameScene()
+      statusBar.setMessage('Vista [6]: Superior / Planta Cenital.')
+      return
+    }
+
+    if (viewport.getViewMode() === '2d') {
+      setViewMode('3d')
+    }
+
+    const { hasGeometry, center, radius } = scene.getStructureBounds()
+    const targetY = center.y > 0.5 ? center.y : 1.5
+    const structureCenter = hasGeometry
+      ? new THREE.Vector3(center.x, targetY, center.z)
+      : cameraController.state.target
+    const fitDistance = hasGeometry ? Math.max(radius * 2.2, 6.5) : cameraController.state.distance
+
+    switch (viewIndex) {
+      case 1:
+        // Frontal (Z frontal, elevación nivel de calle ~12°)
+        animateCameraComplete(structureCenter, 0, 0.22, fitDistance)
+        statusBar.setMessage('Vista [1]: Perspectiva Frontal centrada.')
+        break
+      case 2:
+        // Trasera (Z posterior)
+        animateCameraComplete(structureCenter, Math.PI, 0.22, fitDistance)
+        statusBar.setMessage('Vista [2]: Perspectiva Trasera centrada.')
+        break
+      case 3:
+        // Lateral Izquierda (-X)
+        animateCameraComplete(structureCenter, -Math.PI / 2, 0.22, fitDistance)
+        statusBar.setMessage('Vista [3]: Perspectiva Lateral Izquierda centrada.')
+        break
+      case 4:
+        // Lateral Derecha (+X)
+        animateCameraComplete(structureCenter, Math.PI / 2, 0.22, fitDistance)
+        statusBar.setMessage('Vista [4]: Perspectiva Lateral Derecha centrada.')
+        break
+      case 5:
+        // Isométrica 3D (45°)
+        animateCameraComplete(structureCenter, Math.PI / 4, Math.PI / 6, fitDistance)
+        statusBar.setMessage('Vista [5]: Perspectiva Isométrica 3D (45°).')
+        break
+    }
+  }
+
   /* ---------- Esfera de órbita e indicador de ejes (a prueba de fallos) ----------
      Se montan POR CÓDIGO dentro del contenedor real del canvas visible
      (`canvas.parentElement`), NO por ids del HTML. Así sobreviven a que el layout
@@ -1890,11 +2051,27 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       if (sphereEl.parentElement !== overlay) overlay.appendChild(sphereEl)
       positionControl(sphereEl, 'top-right', 118)
 
+      // Botón flotante «🎯 Enfocar Casa [C]» junto al gizmo de orientación
+      let centerBtn = overlay.querySelector<HTMLButtonElement>('.viewport-center-house-btn')
+      if (!centerBtn) {
+        centerBtn = document.createElement('button')
+        centerBtn.className = 'viewport-center-house-btn'
+        centerBtn.innerHTML = '<span>🎯</span><span>Enfocar Casa [C]</span>'
+        centerBtn.title = 'Re-encuadrar y centrar toda la estructura en la pantalla (Atajo: C o F)'
+        centerBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          updateCameraPivotToStructure(true, true)
+          statusBar.setMessage('🎯 Cámara centrada en la estructura.')
+        })
+        overlay.appendChild(centerBtn)
+      }
+
       // En planta 2D se ocultan; la clase vive en el contenedor padre del canvas.
       if (viewport.getViewMode() === '2d') canvasHost.classList.add('mode-2d')
 
       navigationSphere = mountNavigationSphere(sphereEl, {
         onSnapAxis: (axis, negative) => {
+          updateCameraPivotToStructure(false, false)
           const target = cameraController.viewAnglesForAxis(axis, negative)
           animateCameraToView(target.yaw, target.pitch)
           statusBar.setMessage(`Vista alineada al eje ${negative ? '−' : ''}${axis}.`)
@@ -1907,7 +2084,8 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
           debugPanel?.updateCamera(cameraController.state, viewport.getViewMode(), tool.getMode())
         },
         onReset3D: () => {
-          resetView()
+          updateCameraPivotToStructure(true, true)
+          statusBar.setMessage('🎯 Perspectiva 3D centrada en la estructura.')
         }
       })
 
@@ -2112,6 +2290,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
    */
   function setViewMode(mode: ViewMode): void {
     cancelCameraAnimation()
+    cameraController.setIs2DMode(mode === '2d')
     if (mode === '2d' && viewport.getViewMode() !== '2d') {
       saved3dState = {
         yaw: cameraController.state.yaw,
@@ -2120,12 +2299,15 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         target: cameraController.state.target.clone()
       }
       cameraController.snapToAxis(Axis3D.Y)
-    } else if (mode === '3d' && saved3dState) {
-      cameraController.state.yaw = saved3dState.yaw
-      cameraController.state.pitch = saved3dState.pitch
-      cameraController.state.distance = saved3dState.distance
-      cameraController.state.target.copy(saved3dState.target)
-      saved3dState = null
+    } else if (mode === '3d') {
+      if (saved3dState) {
+        cameraController.state.yaw = saved3dState.yaw
+        cameraController.state.pitch = saved3dState.pitch
+        cameraController.state.distance = saved3dState.distance
+        cameraController.state.target.copy(saved3dState.target)
+        saved3dState = null
+      }
+      updateCameraPivotToStructure(false, false)
     }
 
     viewport.setViewMode(mode)
@@ -2156,12 +2338,14 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     cancelCameraAnimation()
     saved3dState = null
     cameraController.state = new CameraState()
+    cameraController.setIs2DMode(false)
     viewport.setViewMode('3d')
     hud.setViewMode('3d')
     statusBar.setViewMode('3d')
     document.getElementById('viewport-container')?.classList.remove('mode-2d')
+    updateCameraPivotToStructure(true, false)
     syncViewport()
-    statusBar.setMessage('Vista restablecida (perspectiva orbital inicial).')
+    statusBar.setMessage('Vista restablecida (perspectiva orbital centrada).')
   }
 
   /* ---------- Historial (Undo / Redo de la barra superior) ---------- */
@@ -3120,20 +3304,53 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
         break
       }
     }
-    // Atajo [F] / [Shift+F] / [Tab] para invertir mano/apertura de puertas y ventanas seleccionadas
-    if ((event.key === 'f' || event.key === 'F' || event.key === 'Tab') && !inTextField && !hasOpenModalDialog()) {
+    // Re-centrar / Enfocar la estructura: tecla [C] o [F], y vistas rápidas [1] a [6]
+    if (!inTextField && !hasOpenModalDialog() && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (event.key === 'c' || event.key === 'C') {
+        event.preventDefault()
+        updateCameraPivotToStructure(true, true)
+        statusBar.setMessage('🎯 Cámara centrada en la estructura [C].')
+        return
+      }
+
+      if (event.key === 'f' || event.key === 'F') {
+        const selectedObj = scene.getSelectedObject()
+        if (selectedObj && (selectedObj.openingId || resolveObjectOpeningSpec(selectedObj))) {
+          event.preventDefault()
+          if (event.shiftKey) {
+            const nextDir = toggleSwingDirection(selectedObj.swingDirection)
+            scene.updateObject(selectedObj.id, { swingDirection: nextDir })
+            statusBar.setMessage(`Apertura invertida: ${nextDir === 'in' ? 'Interior' : 'Exterior'}`)
+          } else {
+            const nextHand = toggleSwingHand(selectedObj.swingHand)
+            scene.updateObject(selectedObj.id, { swingHand: nextHand })
+            statusBar.setMessage(`Mano invertida: ${nextHand === 'left' ? 'Izquierda' : 'Derecha'}`)
+          }
+          openDoorPropertiesPanel(selectedObj, scene)
+          return
+        }
+        event.preventDefault()
+        updateCameraPivotToStructure(true, true)
+        statusBar.setMessage('🎯 Cámara enfocada en la estructura [F].')
+        return
+      }
+
+      // Vistas rápidas de perspectiva centradas [1] a [6]
+      if (['1', '2', '3', '4', '5', '6'].includes(event.key)) {
+        event.preventDefault()
+        setQuickView(parseInt(event.key, 10) as 1 | 2 | 3 | 4 | 5 | 6)
+        return
+      }
+    }
+
+    // Atajo [Tab] para invertir mano/apertura de puertas y ventanas seleccionadas
+    if (event.key === 'Tab' && !inTextField && !hasOpenModalDialog()) {
       const selectedObj = scene.getSelectedObject()
       if (selectedObj && (selectedObj.openingId || resolveObjectOpeningSpec(selectedObj))) {
         event.preventDefault()
-        if (event.shiftKey || event.key === 'Tab') {
-          const nextDir = toggleSwingDirection(selectedObj.swingDirection)
-          scene.updateObject(selectedObj.id, { swingDirection: nextDir })
-          statusBar.setMessage(`Apertura invertida: ${nextDir === 'in' ? 'Interior' : 'Exterior'}`)
-        } else {
-          const nextHand = toggleSwingHand(selectedObj.swingHand)
-          scene.updateObject(selectedObj.id, { swingHand: nextHand })
-          statusBar.setMessage(`Mano invertida: ${nextHand === 'left' ? 'Izquierda' : 'Derecha'}`)
-        }
+        const nextDir = toggleSwingDirection(selectedObj.swingDirection)
+        scene.updateObject(selectedObj.id, { swingDirection: nextDir })
+        statusBar.setMessage(`Apertura invertida: ${nextDir === 'in' ? 'Interior' : 'Exterior'}`)
         openDoorPropertiesPanel(selectedObj, scene)
         return
       }
@@ -3519,11 +3736,7 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     const totalWalls = scene.getWalls().length
     const totalObjects = scene.getObjects().length
     if (totalWalls > 0 || totalObjects > 0) {
-      if (!extendedState?.camera) {
-        frameScene()
-      } else {
-        syncViewport()
-      }
+      updateCameraPivotToStructure(true, false)
       statusBar.setMessage(
         `Proyecto «${project.name}» restaurado: ${totalWalls} muros y ${totalObjects} elementos.`
       )
@@ -3563,9 +3776,19 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
     )
   }
 
-  scene.onWallAdded(refreshDataStatus)
+  scene.onWallAdded(() => {
+    refreshDataStatus()
+    if (scene.getWalls().length === 1 && scene.getObjects().length === 0) {
+      updateCameraPivotToStructure(false, false)
+    }
+  })
   scene.onWallRemoved(refreshDataStatus)
-  scene.onObjectAdded(refreshDataStatus)
+  scene.onObjectAdded(() => {
+    refreshDataStatus()
+    if (scene.getWalls().length === 0 && scene.getObjects().length === 1) {
+      updateCameraPivotToStructure(false, false)
+    }
+  })
   scene.onObjectRemoved(refreshDataStatus)
   scene.onLevelsChanged(refreshDataStatus)
 
@@ -3767,9 +3990,16 @@ export function mountWorkspace(options: WorkspaceOptions): WorkspaceHandle {
       })
     }
 
+    // Colapsar la tabla BIM para dejar el 100% del área de trabajo 3D despejada al abrir el proyecto
+    bimMasterTableView?.close()
+
     // Asíncrono a propósito: hasta que llegue la respuesta se muestra el lienzo
     // en blanco y la barra de estado con el mensaje de apertura.
-    void restoreProjectScene(project)
+    void restoreProjectScene(project).then(() => {
+      viewport.resize()
+      updateCameraPivotToStructure(true, false)
+      syncViewport()
+    })
 
     setViewMode(project.mode === '2D' ? '2d' : '3d')
     focus()

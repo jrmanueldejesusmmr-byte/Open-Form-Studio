@@ -7,7 +7,8 @@ import { pathToFileURL } from 'node:url'
 const dir = await mkdtemp(path.join(tmpdir(), 'bim-tests-'))
 const entries = [
   'src/renderer/src/bim/bim.test.ts',
-  'src/renderer/src/catalog/cadBlocks.test.ts'
+  'src/renderer/src/catalog/cadBlocks.test.ts',
+  'src/renderer/src/engine/cameraNavigation.test.ts'
 ]
 
 for (const entry of entries) {

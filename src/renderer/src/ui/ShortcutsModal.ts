@@ -15,7 +15,7 @@ interface ShortcutRow {
 }
 
 const DRAWING_SHORTCUTS: readonly ShortcutRow[] = [
-  { keys: ['W', 'M'], label: 'Muro simple', detail: 'Trazar muros conectados punto a punto' },
+  { keys: ['M'], label: 'Muro simple', detail: 'Trazar muros conectados punto a punto' },
   { keys: ['R'], label: 'Habitación Rectangular', detail: '4 muros cerrados de un clic o arrastrando' },
   { keys: ['L'], label: 'Plantilla Perfil L', detail: 'Habitación en L (6 muros) o esquina (2 muros)' },
   { keys: ['U'], label: 'Plantilla Perfil U', detail: '3 muros conectados formando espacio en U' },
@@ -41,12 +41,13 @@ const EDITING_SHORTCUTS: readonly ShortcutRow[] = [
 ]
 
 const VIEW_SHORTCUTS: readonly ShortcutRow[] = [
-  { keys: ['← →', '↑ ↓'], label: 'Rotar 3D / Mover Plano 2D', detail: '3D: orbita e inclina perspectiva · 2D: desplaza planta' },
-  { keys: ['Shift + Flechas'], label: 'Desplazar cámara 3D (Pan)', detail: 'Recorre lateralmente o adelante/atrás el proyecto' },
-  { keys: ['C', 'Home'], label: 'Centrar estructura (Fit)', detail: 'Encuadra automáticamente toda la obra en pantalla' },
-  { keys: ['+ / −', 'RePág / AvPág'], label: 'Acercar / Alejar zoom', detail: 'Zoom continuo fluido al mantener presionado' },
+  { keys: ['← →', '↑ ↓'], label: 'Rotar 3D / Inclinar', detail: '3D: orbita alrededor del centro de la casa (10° a 85°) · 2D: desplaza planta' },
+  { keys: ['W A S D', 'Shift + Flechas'], label: 'Desplazar cámara (Caminar)', detail: 'Recorre adelante, atrás, izquierda y derecha en el terreno' },
+  { keys: ['C', 'F'], label: '🎯 Enfocar Casa (Centrar)', detail: 'Re-encuadra instantáneamente la estructura en el centro del visor' },
+  { keys: ['Doble Clic'], label: 'Enfocar detalle 3D', detail: 'Centra el pivote de rotación sobre el elemento clickeado' },
+  { keys: ['1', '2', '3', '4', '5', '6'], label: 'Vistas Rápidas', detail: '1: Frontal · 2: Trasera · 3: Izq · 4: Der · 5: Isométrica 3D · 6: Planta' },
+  { keys: ['+ / −', 'Scroll'], label: 'Zoom amortiguado', detail: 'Zoom fluido con damping hacia el cursor o centro de la casa' },
   { keys: ['Espacio'], label: 'Alternar Vista 2D / 3D', detail: 'Cambia al instante entre Planta 2D y Perspectiva 3D' },
-  { keys: ['2', '3'], label: 'Ir a Planta 2D / Vista 3D', detail: 'Acceso directo a cada proyección' },
   { keys: ['O'], label: 'Herramienta Orbitar 3D', detail: 'También con clic derecho sobre el fondo vacío' },
   { keys: ['K'], label: 'Vista Rayos X MEP', detail: 'Muros semitransparentes para ver cableado y tuberías internas' },
   { keys: ['Ctrl + K'], label: 'Paleta de comandos', detail: 'Busca y ejecuta cualquier herramienta' },

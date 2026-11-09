@@ -218,11 +218,48 @@ export function mountViewportInteractions(
     else mode = (isOrbitEnabled?.() ?? true) ? 'orbit' : 'pan'
   }
 
+  let targetZoomDistance: number | null = null
+  let zoomRaf: number | null = null
+  let lastFocusDirection: THREE.Vector3 | null = null
+  const DAMPING_FACTOR = 0.08
+
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault()
     const focus = pointerRayDirection?.(e.clientX, e.clientY) ?? null
-    controller.zoom(e.deltaY * wheelDirection, focus)
-    notify()
+    lastFocusDirection = focus
+
+    const factor = Math.exp(-e.deltaY * wheelDirection * controller.zoomSensitivity)
+    if (targetZoomDistance === null) {
+      targetZoomDistance = controller.state.distance
+    }
+    targetZoomDistance *= factor
+    targetZoomDistance = Math.max(
+      controller.state.minDistance,
+      Math.min(controller.state.maxDistance, targetZoomDistance)
+    )
+
+    if (zoomRaf === null) {
+      const stepDampedZoom = (): void => {
+        if (targetZoomDistance === null) {
+          zoomRaf = null
+          return
+        }
+        const currentDist = controller.state.distance
+        const delta = targetZoomDistance - currentDist
+        if (Math.abs(delta) < 0.01) {
+          controller.zoomByFactor(targetZoomDistance / currentDist, lastFocusDirection)
+          targetZoomDistance = null
+          zoomRaf = null
+          notify()
+          return
+        }
+        const nextDist = currentDist + delta * DAMPING_FACTOR
+        controller.zoomByFactor(nextDist / currentDist, lastFocusDirection)
+        notify()
+        zoomRaf = requestAnimationFrame(stepDampedZoom)
+      }
+      zoomRaf = requestAnimationFrame(stepDampedZoom)
+    }
   }
 
   const onContextMenu = (e: MouseEvent): void => {
@@ -262,6 +299,10 @@ export function mountViewportInteractions(
 
   return {
     dispose(): void {
+      if (zoomRaf !== null) {
+        cancelAnimationFrame(zoomRaf)
+        zoomRaf = null
+      }
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('contextmenu', onContextMenu)

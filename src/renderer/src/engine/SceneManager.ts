@@ -1057,22 +1057,62 @@ export class SceneManager {
 
   /** Envolvente de todo lo dibujado (paredes + objetos); por defecto, un lienzo de 10×10. */
   getSceneBounds(): THREE.Box3 {
-    if (this.walls.length === 0 && this.objects.length === 0) {
-      return new THREE.Box3(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5))
-    }
+    return this.getStructureBounds().box
+  }
+
+  /**
+   * Calcula la caja delimitadora (Box3) exacta de toda la estructura construida
+   * (muros con altura, techos con sus polígonos, losas y objetos) y devuelve
+   * su centro geométrico y radio envolvente para encuadre y anclaje de pivote.
+   */
+  getStructureBounds(): { box: THREE.Box3; hasGeometry: boolean; center: THREE.Vector3; radius: number } {
+    let count = 0
     const box = new THREE.Box3()
+
     for (const wall of this.walls) {
+      count++
       box.expandByPoint(wall.start)
       box.expandByPoint(wall.end)
+      const h = wall.height || 2.8
+      box.expandByPoint(new THREE.Vector3(wall.start.x, wall.start.y + h, wall.start.z))
+      box.expandByPoint(new THREE.Vector3(wall.end.x, wall.end.y + h, wall.end.z))
     }
+
     for (const object of this.objects) {
-      const halfX = Math.max(0.25, object.size.x / 2)
-      const halfZ = Math.max(0.25, object.size.z / 2)
-      box.expandByPoint(new THREE.Vector3(object.position.x - halfX, object.position.y, object.position.z - halfZ))
-      box.expandByPoint(
-        new THREE.Vector3(object.position.x + halfX, object.position.y + object.size.y, object.position.z + halfZ)
-      )
+      count++
+      if (object.roofProps?.footprint && object.roofProps.footprint.length >= 3) {
+        for (const pt of object.roofProps.footprint) {
+          box.expandByPoint(new THREE.Vector3(pt.x, object.position.y, pt.z))
+          box.expandByPoint(new THREE.Vector3(pt.x, object.position.y + 3.0, pt.z))
+        }
+      } else {
+        const halfX = Math.max(0.25, object.size.x / 2)
+        const halfZ = Math.max(0.25, object.size.z / 2)
+        const height = Math.max(0.5, object.size.y)
+        box.expandByPoint(new THREE.Vector3(object.position.x - halfX, object.position.y, object.position.z - halfZ))
+        box.expandByPoint(
+          new THREE.Vector3(object.position.x + halfX, object.position.y + height, object.position.z + halfZ)
+        )
+      }
     }
-    return box
+
+    if (count === 0) {
+      box.set(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5))
+      return {
+        box,
+        hasGeometry: false,
+        center: new THREE.Vector3(0, 1.5, 0),
+        radius: 7.5
+      }
+    }
+
+    const center = box.getCenter(new THREE.Vector3())
+    const sphere = box.getBoundingSphere(new THREE.Sphere())
+    return {
+      box,
+      hasGeometry: true,
+      center,
+      radius: Math.max(sphere.radius, 3)
+    }
   }
 }

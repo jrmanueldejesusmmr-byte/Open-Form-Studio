@@ -5,6 +5,7 @@ import { SceneObject } from '../models/SceneObject'
 import type { Opening } from '../models/Opening'
 import { applyMeterUVs, createMeshMaterial, materialTint } from './MaterialSystem'
 import { buildShapeGeometry } from './ShapeMeshBuilder'
+import { buildCadBlock3D } from '../catalog/cadBlocks3D'
 import { buildDoor, buildWindow, type DoorVariant, type WindowVariant } from './OpeningMeshBuilder'
 import { buildFittedRoofGeometry } from './RoofBuilder'
 import { buildTerrainContourLines, buildTerrainGeometry, createDemoTerrainData } from './TerrainBuilder'
@@ -299,6 +300,33 @@ export function buildObjectMesh(object: SceneObject): THREE.Mesh {
     const contourGroup = buildTerrainContourLines(tData, object.size)
     terrainMesh.add(contourGroup)
     return terrainMesh
+  }
+
+  // Bloques CAD 3D y mobiliario arquitectónico con materiales PBR físicos
+  if (!object.importedGeometry && object.shapeId) {
+    const cadResult = buildCadBlock3D(object.shapeId, object.size, {
+      customColor: object.color,
+      isSelected: object.isSelected
+    })
+    if (cadResult) {
+      if (object.isSelected) {
+        for (const m of cadResult.materials) {
+          const std = m as THREE.MeshStandardMaterial
+          if (std && std.emissive) {
+            std.emissive.setHex(SELECTED_COLOR)
+            std.emissiveIntensity = 0.28
+          }
+        }
+      }
+      const mesh = new THREE.Mesh(cadResult.geometry, cadResult.materials)
+      mesh.position.copy(object.position)
+      mesh.rotation.y = object.rotationY
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.userData.objectId = object.id
+      mesh.userData.isCadBlock = true
+      return mesh
+    }
   }
 
   const fitted = fittedRoofGeometry(object)

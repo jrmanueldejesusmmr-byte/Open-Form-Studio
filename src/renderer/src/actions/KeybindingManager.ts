@@ -43,8 +43,6 @@ export function shortcutFromEvent(event: KeyboardEvent): Shortcut {
 const DEFAULT_ALIASES: Readonly<Record<Shortcut, Shortcut>> = {
   // Ctrl+Shift+Z es el «Rehacer» estándar en editores y CAD: mismo destino.
   'Ctrl+Shift+Z': 'Ctrl+Y',
-  // Muro simple: acepta tanto [W] (Wall) como [M] (Muro).
-  m: 'w',
   // Seleccionar / Cancelar trazo: acepta tanto [S] como [Esc].
   Esc: 's',
   // Borrar selección: acepta [Supr] / [Delete] y [Backspace].

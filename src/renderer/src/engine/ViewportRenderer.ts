@@ -649,12 +649,12 @@ export class ViewportRenderer {
     for (const [id, mesh] of this.objectMeshes) {
       const object = this.sceneManager.getObject(id)
       if (!object) continue
-      if (mesh.userData.isOpeningMesh || mesh.userData.isTerrainMesh) {
+      if (mesh.userData.isOpeningMesh || mesh.userData.isTerrainMesh || mesh.userData.isCadBlock) {
         for (const m of materialArray(mesh.material)) {
           const std = m as THREE.MeshStandardMaterial
-          if (std.emissive) {
+          if (std && std.emissive) {
             std.emissive.setHex(object.isSelected ? 0x1d4ed8 : 0x000000)
-            std.emissiveIntensity = object.isSelected ? (mesh.userData.isTerrainMesh ? 0.24 : 0.35) : 0
+            std.emissiveIntensity = object.isSelected ? (mesh.userData.isTerrainMesh ? 0.24 : 0.28) : 0
           }
         }
         continue

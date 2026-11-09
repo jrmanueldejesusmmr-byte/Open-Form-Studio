@@ -7,7 +7,8 @@ import {
   type CadBlockCategory
 } from './cadBlocksData'
 import { generateBlock2DSymbol, renderCadBlock2DSvg } from './cadBlocks2D'
-import { buildCadBlock3DGeometry } from './cadBlocks3D'
+import { buildCadBlock3DGeometry, buildCadBlock3D, createCadMaterialLibrary } from './cadBlocks3D'
+import { buildObjectMesh } from '../engine/WallMeshBuilder'
 import { SceneObject } from '../models/SceneObject'
 import { SceneManager } from '../engine/SceneManager'
 import { BimMasterTable } from '../bim/BimMasterTable'
@@ -237,5 +238,78 @@ const updatedTotals = bimTable.getTotals()
 const updatedWallRow = bimTable.getRows().find((r) => r.id === wallRow!.id)
 assert(updatedWallRow!.unitPrice === 35.0, 'Fila refleja precio unitario actualizado a $35.00')
 assert(updatedTotals.totalBudgetCost > prevTotal, `Presupuesto Total se recalculó instantáneamente a $${updatedTotals.totalBudgetCost} USD`)
+
+// 12. PBR Multi-Material Realista & Geometría Procedural Avanzada
+console.log('\n--- Módulo 12: PBR Multi-Material Realista & Geometría Procedural Avanzada ---')
+
+// Verificación de librería PBR física
+const matLib = createCadMaterialLibrary()
+assert(matLib.carPaint instanceof THREE.MeshPhysicalMaterial, 'carPaint es MeshPhysicalMaterial con clearcoat')
+assert(matLib.carPaint.clearcoat === 1.0, 'carPaint tiene clearcoat 1.0 para acabado automotriz brillante')
+assert(matLib.carPaint.metalness === 0.7, 'carPaint tiene metalness 0.7')
+assert(matLib.carGlass.transparent === true, 'carGlass es transparente')
+assert(matLib.carGlass.opacity === 0.65, 'carGlass tiene opacidad polarizada 0.65')
+assert(matLib.tireRubber.roughness === 0.9, 'tireRubber tiene roughness mate 0.9')
+assert(matLib.rimAlloy.metalness === 0.9, 'rimAlloy tiene metalness cromado 0.9')
+assert(matLib.headlight.emissive.getHex() === 0xfef08a, 'Faros delanteros son emisivos amarillo-blanco')
+assert(matLib.taillight.emissive.getHex() === 0xef4444, 'Luces de freno traseras son emisivas rojo')
+assert(matLib.ceramic.clearcoat === 0.8, 'Porcelana cerámica tiene esmalte clearcoat 0.8')
+assert(matLib.stainlessSteel.metalness === 0.85, 'Acero inoxidable tiene metalness 0.85')
+
+// Verificación de Vehículos Detallados Multi-Material
+const sedanSize = new THREE.Vector3(1.85, 1.5, 4.6)
+const sedan3D = buildCadBlock3D('furn.ext.sedan', sedanSize)
+assert(sedan3D !== null, 'Sedán genera resultado CadBlock3DResult')
+assert(sedan3D!.materials.length >= 5, `Sedán contiene ${sedan3D!.materials.length} materiales PBR diferenciados (carrocería, vidrio, llantas, rines, faros)`)
+assert(sedan3D!.geometry.groups.length >= 5, 'Geometría de sedán tiene grupos asignados por material')
+
+const suvSize = new THREE.Vector3(2.0, 1.8, 5.1)
+const suv3D = buildCadBlock3D('furn.ext.suv', suvSize)
+assert(suv3D !== null && suv3D.materials.length >= 5, 'Camioneta SUV/Pickup genera modelo multi-material con batea/barras')
+
+const truckSize = new THREE.Vector3(2.2, 2.4, 6.2)
+const truck3D = buildCadBlock3D('furn.ext.truck', truckSize)
+assert(truck3D !== null && truck3D.materials.length >= 4, 'Camión ligero genera cabina y caja de carga separadas')
+
+const busSize = new THREE.Vector3(2.55, 3.2, 11.5)
+const bus3D = buildCadBlock3D('furn.ext.bus', busSize)
+assert(bus3D !== null && bus3D.materials.length >= 4, 'Autobús genera carrocería con franja y ventanales panorámicos')
+
+const motoSize = new THREE.Vector3(0.85, 1.2, 2.1)
+const moto3D = buildCadBlock3D('furn.ext.motorcycle', motoSize)
+assert(moto3D !== null && moto3D.materials.length >= 4, 'Motocicleta genera llantas toroide, tanque curvo, asiento y motor')
+
+// Verificación de Mobiliario Interior & Entorno
+const sofaSize = new THREE.Vector3(2.1, 0.85, 0.9)
+const sofa3D = buildCadBlock3D('furn.living.sofa3', sofaSize)
+assert(sofa3D !== null && sofa3D.materials.length >= 3, 'Sofá genera patas de madera, tela base y cojines decorativos de acento')
+
+const bedSize = new THREE.Vector3(2.2, 1.0, 2.1)
+const bed3D = buildCadBlock3D('furn.bed.queen', bedSize)
+assert(bed3D !== null && bed3D.materials.length >= 4, 'Cama Queen genera marco nogal, colchón, edredón azul y almohadas blancas')
+
+const treeSize = new THREE.Vector3(3.5, 4.8, 3.5)
+const tree3D = buildCadBlock3D('furn.ext.tree', treeSize)
+assert(tree3D !== null && tree3D.materials.length >= 3, 'Árbol genera tronco café y copa orgánica de múltiples tonos de verde')
+
+const humanSize = new THREE.Vector3(0.5, 1.7, 0.3)
+const human3D = buildCadBlock3D('furn.ext.human', humanSize)
+assert(human3D !== null && human3D.materials.length >= 4, 'Escala humana genera pantalones, camisa, piel, cabello y zapatos')
+
+// Verificación de Color Personalizado Dinámico
+const customBlueSedan = buildCadBlock3D('furn.ext.sedan', sedanSize, { customColor: 0x2563eb })
+const paintMat = customBlueSedan!.materials.find((m) => (m as THREE.MeshPhysicalMaterial).clearcoat === 1.0) as THREE.MeshPhysicalMaterial
+assert(paintMat !== undefined, 'Material de pintura automotriz encontrado')
+assert(paintMat.color.getHex() === 0x2563eb, 'Pintura automotriz toma el color azul eléctrico personalizado')
+
+// Verificación de integración en buildObjectMesh
+const carObj = new SceneObject('Auto de Paseo', 'furniture')
+carObj.shapeId = 'furn.ext.sedan'
+carObj.size.copy(sedanSize)
+carObj.color = 0xdc2626
+const carMesh = buildObjectMesh(carObj)
+assert(carMesh instanceof THREE.Mesh, 'buildObjectMesh devuelve THREE.Mesh')
+assert(Array.isArray(carMesh.material), 'Malla generada tiene array de materiales PBR')
+assert(carMesh.userData.isCadBlock === true, 'Malla marcada con isCadBlock para preservación de materiales')
 
 console.log('\nTODAS LAS PRUEBAS DE CATÁLOGO CAD Y TABLA MAESTRA BIM PASARON AL 100%.\n')

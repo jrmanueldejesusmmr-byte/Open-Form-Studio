@@ -16,16 +16,21 @@ export class Viewport3DController {
   orbitSensitivity = 0.0075
   panSensitivity = 0.0025
   zoomSensitivity = 0.0015
+  is2DMode = false
 
   constructor(initialState?: CameraState) {
     this.state = initialState ?? new CameraState()
+  }
+
+  setIs2DMode(is2D: boolean): void {
+    this.is2DMode = is2D
   }
 
   /** Órbita la cámara alrededor de target según el desplazamiento del ratón. */
   orbit(deltaX: number, deltaY: number): void {
     this.state.yaw -= deltaX * this.orbitSensitivity
     this.state.pitch += deltaY * this.orbitSensitivity
-    this.state.clampPitch()
+    this.state.clampPitch(this.is2DMode)
   }
 
   /**
@@ -35,7 +40,7 @@ export class Viewport3DController {
   orbitAngles(deltaYaw: number, deltaPitch: number): void {
     this.state.yaw += deltaYaw
     this.state.pitch += deltaPitch
-    this.state.clampPitch()
+    this.state.clampPitch(this.is2DMode)
   }
 
   /** Desplaza el punto target en el plano de la pantalla (pan). */

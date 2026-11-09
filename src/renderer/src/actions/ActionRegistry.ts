@@ -79,7 +79,7 @@ export const ACTION_CATALOG: readonly ActionMeta[] = [
   },
 
   /* Dibujo */
-  { id: 'tool.SimpleWall', label: t('action.tool.simpleWall'), icon: 'wall', category: 'dibujo', defaultShortcut: 'W' },
+  { id: 'tool.SimpleWall', label: t('action.tool.simpleWall'), icon: 'wall', category: 'dibujo', defaultShortcut: 'M' },
   { id: 'tool.StructuralSegment', label: t('action.tool.structuralSegment'), icon: 'cube', category: 'dibujo', defaultShortcut: 'E' },
   { id: 'tool.RoomWalls', label: t('action.tool.roomWalls'), icon: 'layers', category: 'dibujo' },
   { id: 'template.rect', label: t('action.template.rect'), icon: 'plan2d', category: 'dibujo', defaultShortcut: 'R', separatorBefore: true },

@@ -17,11 +17,19 @@ export class CameraState {
   minDistance = 0.3
   maxDistance = 120
 
-  private static readonly PITCH_LIMIT = 1.45 // ~83°, evita gimbal lock en los polos
+  private static readonly PITCH_LIMIT = 1.56 // ~89.4°, para vista cenital 2D
+  public static readonly PITCH_MIN_3D = 0.1745 // ~10° en radianes (nivel de calle, nunca bajo el piso negro)
+  public static readonly PITCH_MAX_3D = 1.4835 // ~85° en radianes (vista aérea alta)
 
-  clampPitch(): void {
-    if (this.pitch > CameraState.PITCH_LIMIT) this.pitch = CameraState.PITCH_LIMIT
-    if (this.pitch < -CameraState.PITCH_LIMIT) this.pitch = -CameraState.PITCH_LIMIT
+  clampPitch(is2D = false): void {
+    if (is2D) {
+      if (this.pitch > CameraState.PITCH_LIMIT) this.pitch = CameraState.PITCH_LIMIT
+      if (this.pitch < -CameraState.PITCH_LIMIT) this.pitch = -CameraState.PITCH_LIMIT
+      return
+    }
+    // En perspectiva 3D: acotado entre 10° y 85° para mantener siempre la casa centrada y no meterse bajo el piso
+    if (this.pitch < CameraState.PITCH_MIN_3D) this.pitch = CameraState.PITCH_MIN_3D
+    if (this.pitch > CameraState.PITCH_MAX_3D) this.pitch = CameraState.PITCH_MAX_3D
   }
 
   clampDistance(): void {

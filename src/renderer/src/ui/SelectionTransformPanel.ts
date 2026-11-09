@@ -13,6 +13,17 @@ import {
 import { cloneTerrainData } from '../models/TerrainTypes'
 import { sampleAnyTerrainAt } from '../engine/TerrainBuilder'
 
+export const QUICK_PALETTE = [
+  { name: 'Rojo Metálico', hex: '#dc2626' },
+  { name: 'Azul Eléctrico', hex: '#2563eb' },
+  { name: 'Blanco Perla', hex: '#f8fafc' },
+  { name: 'Negro Obsidiana', hex: '#18181b' },
+  { name: 'Gris Plata', hex: '#94a3b8' },
+  { name: 'Madera Nogal', hex: '#451a03' },
+  { name: 'Beige Cálido', hex: '#d6d3d1' },
+  { name: 'Verde Natural', hex: '#166534' }
+]
+
 export interface SelectionTransformPanelOptions {
   overlay: HTMLElement
   scene: SceneManager
@@ -113,6 +124,12 @@ export function mountSelectionTransformPanel(
           statsEl.textContent = `Cotas: ${obj.terrainData.minElev.toFixed(2)} m a ${obj.terrainData.maxElev.toFixed(2)} m · Corte: ${(obj.terrainData.cutVolumeM3 ?? 0).toFixed(1)} m³ · Relleno: ${(obj.terrainData.fillVolumeM3 ?? 0).toFixed(1)} m³`
         }
       }
+
+      const objHex = `#${(obj.color ?? 0xdc2626).toString(16).padStart(6, '0')}`
+      setVal('color', objHex)
+      panel.querySelectorAll<HTMLButtonElement>('[data-swatch-color]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.swatchColor?.toLowerCase() === objHex.toLowerCase())
+      })
       return
     }
 
@@ -264,6 +281,18 @@ export function mountSelectionTransformPanel(
       const isRadial = isRadialStructuralShape(shapeId, structParams?.subType)
       const radius = round2((obj.size.x + obj.size.z) / 4)
       const deg = radToDeg360(obj.rotationY)
+      const currentHex = `#${(obj.color ?? 0xdc2626).toString(16).padStart(6, '0')}`
+      const swatchesHtml = QUICK_PALETTE.map(
+        (c) => `
+        <button
+          type="button"
+          class="transform-color-circle ${c.hex.toLowerCase() === currentHex.toLowerCase() ? 'is-active' : ''}"
+          style="background-color: ${c.hex};"
+          data-swatch-color="${c.hex}"
+          title="${c.name} (${c.hex})"
+        ></button>
+      `
+      ).join('')
       const subtypeHtml = isStruct ? renderSubtypeOptions(shapeId, structParams?.subType) : ''
       const showSweep = shapeId === 'geo.muro_curvo' || (shapeId === 'struct.muros_carga' && structParams?.subType === 'curvo')
       const showFloors = shapeId === 'struct.entramada'
@@ -410,6 +439,20 @@ export function mountSelectionTransformPanel(
               : ''
           }
 
+          <div class="transform-section-label">🎨 Color Principal / Acabado</div>
+          <div class="transform-color-row">
+            <div class="transform-color-swatches">
+              ${swatchesHtml}
+            </div>
+            <input
+              type="color"
+              data-tf-input="color"
+              value="${currentHex}"
+              title="Selector de color libre"
+              class="transform-color-picker"
+            />
+          </div>
+
           <div class="transform-section-label">Rotación (0° a 360°)</div>
           <div class="transform-rot-row">
             <input type="range" min="0" max="360" step="1" data-tf-input="rotRange" value="${deg}" />
@@ -523,7 +566,12 @@ export function mountSelectionTransformPanel(
           ? { ...defaultStructuralParamsFor(obj.shapeId!).params }
           : undefined
 
-      if (key === 'width' && Number.isFinite(num) && num >= 0.05) {
+      if (key === 'color') {
+        const hexNum = parseInt(rawVal.replace('#', ''), 16)
+        if (Number.isFinite(hexNum)) {
+          nextColor = hexNum
+        }
+      } else if (key === 'width' && Number.isFinite(num) && num >= 0.05) {
         nextSize.x = num
         if (nextStruct && isRadialStructuralShape(obj.shapeId, nextStruct.subType)) {
           nextStruct.radius = round2((nextSize.x + nextSize.z) / 4)
@@ -616,6 +664,15 @@ export function mountSelectionTransformPanel(
         // Confirmación en historial Deshacer/Rehacer al terminar de editar
         el.addEventListener('change', () => applyField(key, el.value, false))
       }
+    })
+
+    panel.querySelectorAll<HTMLButtonElement>('[data-swatch-color]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const c = btn.dataset.swatchColor
+        if (c) {
+          applyField('color', c, false)
+        }
+      })
     })
   }
 
